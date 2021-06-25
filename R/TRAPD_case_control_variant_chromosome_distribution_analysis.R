@@ -15,6 +15,16 @@ df_chr_dementia_test <- t(df_chr_dementia_test)
 df_chr_AD_test <- t(df_chr_AD_test)
 df_chr_earlyAD_test <- t(df_chr_earlyAD_test)
 
+# chi-square test
 chisq.test(df_chr_dementia_test)
 chisq.test(df_chr_AD_test)
 chisq.test(df_chr_earlyAD_test)
+
+# output the dataframe for drawing the plots
+df_chr_dementia_test <- as.data.frame(t(df_chr_dementia_test));df_chr_dementia_test$chr <- as.integer(unlist(lapply(rownames(df_chr_dementia_test), function(x){unlist(strsplit(x,"chr")[[1]][2])})))
+df_chr_AD_test <- as.data.frame(t(df_chr_AD_test));df_chr_AD_test$chr <- as.integer(unlist(lapply(rownames(df_chr_AD_test), function(x){unlist(strsplit(x,"chr")[[1]][2])})))
+df_chr_earlyAD_test <- as.data.frame(t(df_chr_earlyAD_test));df_chr_earlyAD_test$chr <- as.integer(unlist(lapply(rownames(df_chr_earlyAD_test), function(x){unlist(strsplit(x,"chr")[[1]][2])})))
+
+write.csv(df_chr_dementia_test,"df_chr_dementia_test.csv")
+write.csv(df_chr_AD_test,"df_chr_AD_test.csv")
+write.csv(df_chr_earlyAD_test,"df_chr_earlyAD_test.csv")
