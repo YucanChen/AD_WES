@@ -20,6 +20,27 @@ chisq.test(df_chr_dementia_test)
 chisq.test(df_chr_AD_test)
 chisq.test(df_chr_earlyAD_test)
 
+# individual chromosome level fisher test
+chr_chisquare_test <- function(df){
+  case_sum <- sum(df$case_snp)
+  control_sum <- sum(df$control_snp)
+  result_df <- data.frame()
+  for(i in 1:length(df$chr)){
+    test.set <- c(df[i,"case_snp"],df[i,"control_snp"],case_sum-df[i,"case_snp"],control_sum-df[i,"control_snp"])
+    test.dataframe <- matrix(test.set,nrow = 2,dimnames = list(c("case","control"),c("chr_i","other_chrs")))
+    result <- fisher.test(test.dataframe)
+    chri_df <- data.frame(chr=df[i,"chr"],dds_ratio=as.numeric(result$estimate),p_value=result$p.value)
+    result_df <- rbind(result_df,chri_df)
+  }
+  result_df$adj_pvalue <- p.adjust(result_df$p_value,method = "fdr")
+  return(result_df)
+}
+result_dementia <- chr_chisquare_test(df_chr_dementia_test)
+result_AD <- chr_chisquare_test(df_chr_AD_test)
+result_earlyAD <- chr_chisquare_test(df_chr_earlyAD_test)
+sheets = list("fisher_dementia"=result_dementia,"fisher_AD"=result_AD,"fisher_earlyAD"=result_earlyAD)
+write.xlsx(sheets,"chromosome_distribution_fishertest_result_all.xlsx")
+
 # output the dataframe for drawing the plots
 df_chr_dementia_test <- as.data.frame(t(df_chr_dementia_test));df_chr_dementia_test$chr <- as.integer(unlist(lapply(rownames(df_chr_dementia_test), function(x){unlist(strsplit(x,"chr")[[1]][2])})))
 df_chr_AD_test <- as.data.frame(t(df_chr_AD_test));df_chr_AD_test$chr <- as.integer(unlist(lapply(rownames(df_chr_AD_test), function(x){unlist(strsplit(x,"chr")[[1]][2])})))
