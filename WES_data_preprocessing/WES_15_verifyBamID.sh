@@ -9,7 +9,7 @@ done
 
 for i in /recall/*_dedup_recal.bam
 do
-j=${i##*/WES_output_batch2/recall/}
+j=${i##*/recall/}
 verifyBamID --vcf /filtered_vcf/WES_filter_pass_new.snp.vcf --bam $i --out /WES_output_combine/verifyBamID_files/${j%_dedup_recal.bam}_verifyBamID --verbose --ignoreRG &
 done
 wait
