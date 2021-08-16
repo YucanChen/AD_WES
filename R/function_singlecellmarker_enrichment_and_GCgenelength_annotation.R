@@ -34,6 +34,7 @@ get_genelengthGCcontent<-function(burdenresult){
   GeneLength_df<-as.data.frame(GeneLength_df)
   burdengene_character<-merge(ensembl_list_all,GeneLength_df,by="ensembl_gene_id")
   burdengene_character<-burdengene_character[!duplicated(burdengene_character$ensembl_gene_id),]
+  burdengene_character$transcript_length<-as.integer(burdengene_character$transcript_length)
   return(burdengene_character)
 }
 
