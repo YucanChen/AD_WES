@@ -27,14 +27,16 @@ get_genelengthGCcontent<-function(burdenresult){
   #library("biomaRt")
   #mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
   burdenresult_list_all<-burdenresult$entrez_id
-  ensembl_list_all<-getBM(values = burdenresult_list_all, filters = "entrezgene_id", mart= mart, attributes = c("entrezgene_id","ensembl_gene_id","percentage_gene_gc_content"))
-  GeneLength<-getBM(values = ensembl_list_all$ensembl_gene_id, filters = "ensembl_gene_id", mart= mart, attributes = c("ensembl_gene_id","transcript_length"))
-  GeneLength<-by(GeneLength,GeneLength$ensembl_gene_id,function(x){x[which.max(x$transcript_length),"transcript_length"]})
-  GeneLength_df<-cbind(ensembl_gene_id=names(GeneLength),transcript_length=as.integer(GeneLength))
-  GeneLength_df<-as.data.frame(GeneLength_df)
-  burdengene_character<-merge(ensembl_list_all,GeneLength_df,by="ensembl_gene_id")
-  burdengene_character<-burdengene_character[!duplicated(burdengene_character$ensembl_gene_id),]
+  ensembl_list_all<-getBM(values = burdenresult_list_all, filters = "entrezgene_id", mart= mart, attributes = c("entrezgene_id","ensembl_gene_id","transcript_length"))
+  ensembl_list_all_by<-by(ensembl_list_all,ensembl_list_all$entrezgene_id,function(x){x[which.max(x$transcript_length),c("ensembl_gene_id","transcript_length")]})
+  tmp<-unlist(ensembl_list_all_by)
+  tmp<-as.data.frame(matrix(tmp,nrow=length(names(ensembl_list_all_by)),ncol = 2,byrow=TRUE))
+  colnames(tmp)<-c("ensembl_gene_id","transcript_length")
+  ensembl_list_all<-cbind(entrezgene_id=names(ensembl_list_all_by),tmp)
+  GCcontent<-getBM(values = ensembl_list_all$ensembl_gene_id, filters = "ensembl_gene_id", mart= mart, attributes = c("ensembl_gene_id","percentage_gene_gc_content"))
+  burdengene_character<-merge(ensembl_list_all,GCcontent,by=c("ensembl_gene_id"))
   burdengene_character$transcript_length<-as.integer(burdengene_character$transcript_length)
+  burdengene_character<-burdengene_character[!duplicated(burdengene_character$ensembl_gene_id),]
   return(burdengene_character)
 }
 
