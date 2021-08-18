@@ -34,9 +34,7 @@ tmp_dataframe = pd.DataFrame()
 for i in range(len(geneset_list)):
     if (geneset_list[i] in list(data_test['gene1'])) or (geneset_list[i] in list(data_test['gene2'])):
         geneset_num += 1
-        tmp_dataframe1 = data_test[(data_test['gene1'] == geneset_list[i])]
-        tmp_dataframe2 = data_test[(data_test['gene2'] == geneset_list[i])]
-        tmp_dataframe=pd.concat([tmp_dataframe1,tmp_dataframe2],axis=0)
+        tmp_dataframe = data_test[(data_test['gene1'] == geneset_list[i])|(data_test['gene2'] == geneset_list[i])]
         cor_data_test=pd.concat([cor_data_test,tmp_dataframe],axis=0)
 # output median of genes from the geneset
 geneset_median = np.median(abs(cor_data_test["cor"]))
@@ -54,9 +52,7 @@ def permutation_test(permutation_time):
     tmp_dataframe=pd.DataFrame()
     for i in range(0,geneset_num):
         if (random_seeds[i] in list(data_test['gene1'])) or (random_seeds[i] in list(data_test['gene2'])):
-            tmp_dataframe1 = data_test[(data_test['gene1']==random_seeds[i])]
-            tmp_dataframe2 = data_test[(data_test['gene2'] == random_seeds[i])]
-            tmp_dataframe=pd.concat([tmp_dataframe1,tmp_dataframe2],axis=0)
+            tmp_dataframe = data_test[(data_test['gene1']==random_seeds[i])|(data_test['gene2'] == random_seeds[i])]
             cor_data_test=pd.concat([cor_data_test,tmp_dataframe],axis=0)
     tmp_median=np.median(abs(cor_data_test["cor"]))
     return(tmp_median)
@@ -64,7 +60,8 @@ def permutation_test(permutation_time):
 if __name__ == "__main__":
   # calculate median value
   # iterate multiple times and obtain the distribution of medians
-  pool = Pool()
+  cpu_num=os.cpu_count()
+  pool = Pool(cpu_num)
   jobs = []
   for permutation_time in range(args.permutation_time):
     jobs.append(pool.apply_async(permutation_test, args=(permutation_time,)))
