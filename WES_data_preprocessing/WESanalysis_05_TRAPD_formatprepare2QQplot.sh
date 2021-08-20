@@ -27,7 +27,7 @@ python ~/TRAPD/code/make_snp_file.py --vcffile $vcffile_case_inner --outfile $ou
 python ~/TRAPD/code/make_snp_file.py --vcffile $vcffile_case_indel_inner --outfile $outfile_case_indel_inner --genecolname "Gene.refGene" --bedfile $bedfile --indelonly &
 wait
 
-#### 1b) Merging SNP files This is an optional step if you need to merge two SNP files (for example, if you performed step 1a separately for SNPs and indels). It can also be used if you perfomed Step 1a separately for each chromosome. It has two required options:
+#### 1b) Merging SNP files
 snpfile_case=~/burden_test/case/WES_highquality_hg38_sorted.snp.PAV_D_deXY.filter.snpfile.txt
 indelfile_case=~/burden_test/case/WES_highquality_hg38_sorted.indel.PAV_deXY.filter.indelfile.txt
 snpfile_control=~/burden_test/case/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.filter.snpfile.txt
@@ -44,8 +44,7 @@ python ~/TRAPD/code/merge_snp_file.py --snpfiles $snpfile_control,$indelfile_con
 python ~/TRAPD/code/merge_snp_file.py --snpfiles $snpfile_case_inner,$indelfile_case_inner --outfile $outfile_case_inner &
 wait
 
-#### 2a) Counting carriers in case cohort This script will tabulate the number of cases carrying qualifying variants in each gene as defined by a SNP file.
-#The command takes in a vcf file containing case sample genotypes and a SNP file listing the qualifying variants for each gene. The general command is:
+#### 2a) Counting carriers in case cohort
 bedfile=~/burden_test/case/combined.dp10.bed
 case_vcf=~/burden_test/case/WES_highquality_hg38_sorted.snp.PAV_D_deXY.vcf.gz
 case_snpfile=~/burden_test/case/WES_highquality_hg38_sorted.snp.PAV_D_deXY.filter.snpfile.txt
@@ -65,8 +64,6 @@ python ~/TRAPD/code/count_cases.py -v $case_vcf_merge_inner -s $case_snpfile_mer
 wait
 
 #### 2b) Counting carriers in public control cohorts
-#This script will tabulate the approximate number of controls carrying qualifying variants in each gene as defined by a SNP file. Currently, this script has been configured to run using ExAC (http://exac.broadinstitute.org/downloads) or gnomAD (http://gnomad.broadinstitute.org/) data, but any sites-only vcf can be used (as long as it contains AC and AN in the INFO field).
-#The general command is:
 bedfile=~/burden_test/case/combined.dp10.bed
 control_vcf=~/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.vcf.gz
 control_snpfile=~/burden_test/case/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.filter.snpfile.txt
@@ -79,8 +76,7 @@ controlcounts_merge=~/burden_test/case/gnomad.exomes.r2.1.1.sites.liftover_grch3
 python ~/TRAPD/code/count_controls.py -v $control_vcf -s $control_snpfile -o $controlcounts --pass --bedfile $bedfile --database "gnomad"
 python ~/TRAPD/code/count_controls.py -v $control_vcf_merge -s $control_snpfile_merge -o $controlcounts_merge --pass --bedfile $bedfile --database "gnomad"
 
-#### 3) Run burden testing This script will run the actual burden testing. It performs a one-sided Fisher's exact test to determine if there is a greater burden of qualifying variants in cases as compared to controls for each gene. It will perform this burden testing under a dominant and a recessive model.
-#It requires R; the script was tested using R v3.1, but any version of R should work. The script should be run as:
+#### 3) Run burden testing This script will run the actual burden testing
 casecounts=~/burden_test/case/WES_highquality_hg38_sorted.snp.PAV_D_deXY.filter.casecounts.txt
 controlcounts=~/burden_test/case/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.filter.casecounts.txt
 outfile=~/burden_test/burden_test_results/burden.out_grch38_deXYclean_D_PTV.txt
@@ -100,7 +96,7 @@ $Rscript $burden_R --casefile $casecounts --casesize 60 --controlfile $controlco
 $Rscript $burden_R --casefile $casecounts_merge --casesize 60 --controlfile $controlcounts_merge --controlsize 125748 --outfile $outfile_merge
 $Rscript $burden_R --casefile $casecounts_merge_inner --casesize 60 --controlfile $controlcounts_merge --controlsize 125748 --outfile $outfile_merge_inner
 
-#### Generate QQ Plot The last step is the generate the QQ plot and calculate the lambda_delta95 as described in our paper
+#### Generate QQ Plot
 burden_outfile=~/burden_test/burden_test_results/burden.out_grch38_deXYclean_D_PTV.txt
 out_png=~/burden_test/burden_test_results/burden.out_grch38_deXYclean_D_PTV.png
 burden_outfile_merge=~/burden_test/burden_test_results/burden.out_grch38_deXYclean_PTVcal.merge.txt
