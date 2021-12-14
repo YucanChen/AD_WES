@@ -1,3 +1,6 @@
+#-------------------------------------------------------------------------------
+# PanglaoDB database: cell type marker enrichment testing
+#-------------------------------------------------------------------------------
 get_cellmarker_identity<-function(burdenresult,celltype_markers){
   #adding the title using the celltype marker list
   celltype_names<-unique(celltype_markers$cell.type)
@@ -88,4 +91,79 @@ get_heatmatrix<-function(celltype_enrich,all_celltype_enrich_names){
     }
   }
   return(class_list)
+}
+
+#-------------------------------------------------------------------------------
+# CellMarker database: cell type marker enrichment testing
+#-------------------------------------------------------------------------------
+get_CellMarker_celltypefilter<-function(celltype_marker,filtertype,filter_value){
+  # <dependencies>: dplyr,magrittr,tidyverse
+  if("speciesType" %in% filtertype){
+    celltype_marker<-filter(celltype_marker,speciesType==filter_value[filtertype %in% "speciesType"])
+  }
+  if("tissueType" %in% filtertype){
+    celltype_marker<-filter(celltype_marker,tissueType==filter_value[filtertype %in% "tissueType"])
+  }
+  if("cancerType" %in% filtertype){
+    celltype_marker<-filter(celltype_marker,cancerType==filter_value[filtertype %in% "cancerType"])
+  }
+  celltype_marker$tissue_cellname <- paste(celltype_marker$tissueType,celltype_marker$cellName,sep = '__')
+  celltype_marker_new <- celltype_marker %>%
+    group_by(speciesType,tissueType,cancerType,cellType,cellName,CellOntologyID,tissue_cellname) %>%
+    summarise(geneSymbol=paste(gsub("\\[|\\]","",geneSymbol),collapse=", "),geneID=paste(gsub("\\[|\\]","",geneID),collapse=", ")) %>%
+    apply(1, function(x){
+      x<-as.data.frame(t(x))
+      gene_df<-x %>% dplyr::select(geneSymbol,geneID)
+      tmp.geneID<-gene_df$geneID %>% strsplit(", ") %>% unlist %>% as.data.frame %>% dplyr::rename(c(geneID=.)) %>% filter(geneID!="NA")
+      x %<>% dplyr::select(-c("geneSymbol","geneID"))
+      gene_df<-cbind(x[rep(1:nrow(x),nrow(tmp.geneID)),],tmp.geneID)
+      return(gene_df)
+    })
+  celltype_marker_new <- Reduce(function(x,y) merge(x,y,all=T),celltype_marker_new)
+  return(celltype_marker_new)
+}
+
+get_CellMarker_annotation_prepare<-function(df.geneID_tissuecellname,background_genes){
+  # use the TRAPD output
+  annotate_df<-background_genes %>%
+               dplyr::select(entrezgene_id,ensembl_gene_id,transcript_length,percentage_gene_gc_content) %>%
+               group_by(entrezgene_id,ensembl_gene_id,transcript_length,percentage_gene_gc_content) %>%
+               summarise()
+  celltype_list<-unique(df.geneID_tissuecellname$tissue_cellname)
+  col_num<-ncol(annotate_df)
+  for(i in 1:length(celltype_list)){
+    celltype_list_genes<-df.geneID_tissuecellname %>% filter(tissue_cellname==celltype_list[i])
+    annotate_df[,col_num+i]<-unlist(lapply(annotate_df$entrezgene_id,function(x){if(x %in% celltype_list_genes$geneID){1}else{0}}))
+  }
+  colnames(annotate_df)<-c(colnames(annotate_df)[1:col_num],celltype_list)
+  annotate_df %<>% data.frame
+  return(annotate_df)
+}
+
+get_CellMarker_celltypeEnrichment<-function(annotate_df,disease_genes){
+  # input disease_genes as character
+  annotate_df$disease<-unlist(lapply(annotate_df$entrezgene_id,function(x){if(x %in% disease_genes){1}else{0}}))
+  all_fit_disease<-data.frame()
+  annotate_df.colnames<-colnames(annotate_df)
+  for(i in (4+1):(ncol(annotate_df)-1)){
+    annotate_df.fit<-glm(as.numeric(unlist(annotate_df[,i]))~disease+percentage_gene_gc_content+transcript_length,data = annotate_df)
+    tmp<-summary(annotate_df.fit)$coefficients %>% as.data.frame
+    tmp<-tmp["disease",]
+    rownames(tmp)<-annotate_df.colnames[i]
+    all_fit_disease<-rbind(all_fit_disease,tmp)
+  }
+  all_fit_disease$cell_type<-rownames(all_fit_disease)
+  all_fit_disease$p_adjust<-p.adjust(all_fit_disease$`Pr(>|t|)`,method = "fdr")
+  all_fit_disease<-all_fit_disease[order(all_fit_disease$p_adjust),]
+  return(all_fit_disease)
+}
+
+get_CellMarker_enrichfilter<-function(df.CellMarker_enrich_res,p_adjust_value){
+  df.CellMarker_enrich_res %<>% filter(p_adjust<p_adjust_value)
+  if(nrow(df.CellMarker_enrich_res)>0){
+    return(df.CellMarker_enrich_res)
+  }
+  else{
+    print("Not exist!")
+  }
 }
