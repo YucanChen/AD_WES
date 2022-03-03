@@ -23,7 +23,7 @@ library(tidyverse)
 # check
 theme_set(theme_bw())
 # check
-source("function_singlecell_marker_enrichment_analysis_CellMarker.R")
+source("./R/function_singlecell_marker_enrichment_analysis_CellMarker.R")
 outPath <- "./results/single-cell_enrichment"
 ```
 
