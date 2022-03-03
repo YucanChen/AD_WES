@@ -9,7 +9,6 @@ date: "`r format(Sys.time(), '%d %B, %Y')`"
 ```{r, message=FALSE, warning=FALSE}
 library(openxlsx)
 library(clusterProfiler)
-# check
 library(org.Hs.eg.db)
 library(biomaRt)
 library(lattice)
@@ -19,10 +18,7 @@ library(dplyr)
 library(magrittr)
 library(tidyverse)
 
-#devtools::load_all()
-# check
 theme_set(theme_bw())
-# check
 source("./R/function_singlecell_marker_enrichment_analysis_CellMarker.R")
 outPath <- "./results/single-cell_enrichment"
 ```
