@@ -1,0 +1,308 @@
+---
+title: "Allen Human Brain Atlas RNA-seq data exploration for DE analyses"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+library(dplyr)
+library(tidyverse)
+library(magrittr)
+library(foreach)
+library(ggplot2)
+library(ggpubr)
+library(scatterplot3d)
+library(limma)
+library(sva)
+library(ComplexHeatmap)
+library(reshape2)
+library(circlize)
+
+source("./R/function_ALLENexpdata_exploration.R")
+outPath <- "./results/ALLENexpdata_exploration"
+# need change when upload! => outPath <- "ALLENdata_disease_exploration"
+```
+
+## load Allen expression data
+
+```{r}
+# load AD vs Norm data
+
+ALLENexp.ADNorm.col<-read.csv("./metadata/ALLENexp_ADvsNorm_columnssamples.csv")
+rownames(ALLENexp.ADNorm.col)<-ALLENexp.ADNorm.col[["rnaseq_profile_id"]]
+ALLENexp.ADNorm<-read.csv("./metadata/ALLENexp_ADvsNorm_log2fpkmplus1_normalized.csv")
+rownames(ALLENexp.ADNorm)<-ALLENexp.ADNorm[["gene_entrez_id"]];ALLENexp.ADNorm %<>% select(-c("gene_entrez_id"))
+ALLENexp.ADNorm_rowgenes<-read.csv("./metadata/ALLENexp_ADvsNorm_rowsgenes.csv")
+rownames(ALLENexp.ADNorm_rowgenes)<-ALLENexp.ADNorm_rowgenes[["gene_entrez_id"]]
+
+ALLENexp.ADNorm.col[which(ALLENexp.ADNorm.col$structure_acronym=="HIP"),"structure_color"]="#339900"
+ALLENexp.ADNorm.col[which(ALLENexp.ADNorm.col$structure_acronym=="FWM"),"structure_color"]="#0066CC"
+ALLENexp.ADNorm.col[which(ALLENexp.ADNorm.col$structure_acronym=="TCx"),"structure_color"]="#6600CC"
+ALLENexp.ADNorm.col[which(ALLENexp.ADNorm.col$structure_acronym=="PCx"),"structure_color"]="#FF9933"
+
+# load Dementia vs Norm data
+
+ALLENexp.col<-read.csv("./metadata/ALLENexp_columnssamples.csv")
+rownames(ALLENexp.col)<-ALLENexp.col[["rnaseq_profile_id"]]
+ALLENexp<-read.csv("./metadata/ALLENexp_log2fpkmplus1_normalized.csv")
+rownames(ALLENexp)<-ALLENexp[["gene_entrez_id"]];ALLENexp %<>% select(-c("gene_entrez_id"))
+ALLENexp.rowgenes<-read.csv("./metadata/ALLENexp_rowsgenes.csv")
+rownames(ALLENexp.rowgenes)<-ALLENexp.rowgenes[["gene_entrez_id"]]
+
+ALLENexp.col[which(ALLENexp.col$structure_acronym=="HIP"),"structure_color"]="#339900" #green HIP
+ALLENexp.col[which(ALLENexp.col$structure_acronym=="FWM"),"structure_color"]="#0066CC" #blue FWM
+ALLENexp.col[which(ALLENexp.col$structure_acronym=="TCx"),"structure_color"]="#6600CC" #purple TCx
+ALLENexp.col[which(ALLENexp.col$structure_acronym=="PCx"),"structure_color"]="#FF9933" #orange PCx
+```
+
+## load testing genesets
+
+```{r}
+# burdened genes
+burdengene_AD<-read.csv("./metadata/list_burdengenes_AD.csv")
+burdengene_ADearly<-read.csv("./metadata/list_burdengenes_ADearly.csv")
+burdengene_dementia<-read.csv("./metadata/list_burdengenes_dementia.csv")
+
+# case-only and burden genes
+list_caseonly_dementia<-read.table("./metadata/list_TRAPD_caseonly_dementia_entrezid.txt")[,1]
+list_caseonly_AD<-read.table("./metadata/list_TRAPD_caseonly_AD_entrezid.txt")[,1]
+list_caseonly_earlyAD<-read.table("./metadata/list_TRAPD_caseonly_earlyAD_entrezid.txt")[,1]
+list_caseonly_and_burden_all<-read.table("./metadata/list_TRAPD_caseonly_mutatedgenes_an_burdengenes.txt",header = T)
+```
+
+################################################################################
+#
+# Section 1: AD vs Norm
+#
+################################################################################
+
+## PCA analysis and de-outlier
+
+### outlier detection
+
+```{r, message=FALSE, warning=FALSE}
+probesetvar = apply(ALLENexp.ADNorm, 1, var)
+ord = order(probesetvar, decreasing=TRUE)
+pca = prcomp(t(ALLENexp.ADNorm[ord,]), scale=TRUE)
+ss=summary(pca)
+pca_table<-pca$x %>% as.data.frame %>% apply(.,2,as.numeric)
+rownames(pca_table)<-colnames(ALLENexp.ADNorm)
+var_explained <- pca$sdev^2/sum(pca$sdev^2)
+
+var_explained[1:85]
+sum(var_explained[1:15]) # 0.3845332
+
+outliers=apply(pca_table[,1:15],2,function(x)which(abs(x-mean(x))>6*sd(x)))
+
+outliers
+```
+
+### scatter plot & screeplot
+
+```{r, message=FALSE, warning=FALSE}
+# sample scatter plot
+pdf(paste(outPath,"ADvsNorm_PCA_scatterplot_2d.pdf",sep = '/'))
+par(mfrow = c( 1, 1 ))
+plot(pca$x[,1:2],type="p",xlab=paste0("PC1: ",round(var_explained[1]*100,1),"%"),
+     ylab=paste0("PC2: ",round(var_explained[2]*100,1),"%"),
+     col=ALLENexp.ADNorm.col$structure_color,pch=21,main="sample PCA figure",cex.main=1)
+text(pca$x,labels = rownames(pca$x),pos = 1,offset = 0.6,cex = 0.3)
+dev.off()
+
+pdf(paste(outPath,"ADvsNorm_PCA_scatterplot_3d.pdf",sep = '/'))
+scatterplot3d(pca$x[,1:3],pch=c(20),color = ALLENexp.ADNorm.col$structure_color)
+dev.off()
+
+# PCA screeplot
+screeplot(pca, npcs = 198, type = "lines")
+```
+
+## differential expression analysis
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+FWM_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"FWM","AD",burdengene_dementia$ENTREZID)
+TCx_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"TCx","AD",burdengene_dementia$ENTREZID)
+HIP_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"HIP","AD",burdengene_dementia$ENTREZID)
+PCx_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"PCx","AD",burdengene_dementia$ENTREZID)
+
+# case-only and burden genes
+AD_caseonlyburden_FWM_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"FWM","AD",list_caseonly_and_burden_all$ENTREZID)
+AD_caseonlyburden_TCx_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"TCx","AD",list_caseonly_and_burden_all$ENTREZID)
+AD_caseonlyburden_HIP_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"HIP","AD",list_caseonly_and_burden_all$ENTREZID)
+AD_caseonlyburden_PCx_combat_exp<-get_exprmat_ALLEN(ALLENexp.ADNorm,ALLENexp.ADNorm.col,"PCx","AD",list_caseonly_and_burden_all$ENTREZID)
+```
+
+### example: normal distribution testing
+
+```{r}
+shapiro.test(FWM_combat_exp[1,])
+shapiro.test(PCx_combat_exp[10,])
+shapiro.test(HIP_combat_exp[10,])
+shapiro.test(TCx_combat_exp[1,])
+
+hist(TCx_combat_exp[9,])
+```
+
+## z-score transformation & mark significantly DE genes
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+zcore_signifgenes_FWM=get_signifgenes(FWM_combat_exp,"FWM","AD",fdr_threshold=0.05)
+zcore_signifgenes_TCx=get_signifgenes(TCx_combat_exp,"TCx","AD",fdr_threshold=0.05)
+zcore_signifgenes_HIP=get_signifgenes(HIP_combat_exp,"HIP","AD",fdr_threshold=0.05)
+zcore_signifgenes_PCx=get_signifgenes(PCx_combat_exp,"PCx","AD",fdr_threshold=0.05)
+
+# case-only and burden genes
+AD_caseonlyburden_zcore_signifgenes_FWM=get_signifgenes(AD_caseonlyburden_FWM_combat_exp,"FWM","AD",fdr_threshold=0.05)
+AD_caseonlyburden_zcore_signifgenes_TCx=get_signifgenes(AD_caseonlyburden_TCx_combat_exp,"TCx","AD",fdr_threshold=0.05)
+AD_caseonlyburden_zcore_signifgenes_HIP=get_signifgenes(AD_caseonlyburden_HIP_combat_exp,"HIP","AD",fdr_threshold=0.05)
+AD_caseonlyburden_zcore_signifgenes_PCx=get_signifgenes(AD_caseonlyburden_PCx_combat_exp,"PCx","AD",fdr_threshold=0.05)
+```
+
+## Plot drawing
+
+### heatmap plot
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+pdf(paste(outPath,"/Heatmap_express_ADvsNorm_burdenedgenes.pdf",sep = ""))
+
+draw_heatmap_zscore(zcore_signifgenes_FWM,"AD","FWM",fdr_threshold = 0.05)
+draw_heatmap_zscore(zcore_signifgenes_TCx,"AD","TCx",fdr_threshold = 0.05)
+draw_heatmap_zscore(zcore_signifgenes_HIP,"AD","HIP",fdr_threshold = 0.05)
+draw_heatmap_zscore(zcore_signifgenes_PCx,"AD","PCx",fdr_threshold = 0.05)
+
+dev.off()
+
+# case-only and burden genes
+pdf(paste(outPath,"/Heatmap_express_ADvsNorm_case-only_AND_burdenedgenes.pdf",sep = ""))
+
+draw_heatmap_zscore(AD_caseonlyburden_zcore_signifgenes_FWM,"AD","FWM",fdr_threshold=0.05)
+draw_heatmap_zscore(AD_caseonlyburden_zcore_signifgenes_TCx,"AD","TCx",fdr_threshold=0.05)
+draw_heatmap_zscore(AD_caseonlyburden_zcore_signifgenes_HIP,"AD","HIP",fdr_threshold=0.05)
+draw_heatmap_zscore(AD_caseonlyburden_zcore_signifgenes_PCx,"AD","PCx",fdr_threshold=0.05)
+
+dev.off()
+```
+
+### violin plot
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+pdf(paste(outPath,"/Violin_express_ADvsNorm_burdenedgenes.pdf",sep = ""))
+
+draw_violin_plots(zcore_signifgenes_FWM,"AD","FWM",fdr_threshold=0.05)
+draw_violin_plots(zcore_signifgenes_TCx,"AD","TCx",fdr_threshold=0.05)
+draw_violin_plots(zcore_signifgenes_HIP,"AD","HIP",fdr_threshold=0.05)
+draw_violin_plots(zcore_signifgenes_PCx,"AD","PCx",fdr_threshold=0.05)
+
+dev.off()
+
+# case-only and burden genes
+pdf(paste(outPath,"/Violin_express_ADvsNorm_case-only_AND_burdenedgenes.pdf",sep = ""))
+
+draw_violin_plots(AD_caseonlyburden_zcore_signifgenes_FWM,"AD","FWM",fdr_threshold=0.05)
+draw_violin_plots(AD_caseonlyburden_zcore_signifgenes_TCx,"AD","TCx",fdr_threshold=0.05)
+draw_violin_plots(AD_caseonlyburden_zcore_signifgenes_HIP,"AD","HIP",fdr_threshold=0.05)
+draw_violin_plots(AD_caseonlyburden_zcore_signifgenes_PCx,"AD","PCx",fdr_threshold=0.05)
+
+dev.off()
+```
+
+################################################################################
+#
+# Section 2: Dementia vs Norm
+#
+################################################################################
+
+# differential expression analysis
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+Dementia_FWM_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"FWM","dementia",burdengene_dementia$ENTREZID)
+Dementia_TCx_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"TCx","dementia",burdengene_dementia$ENTREZID)
+Dementia_HIP_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"HIP","dementia",burdengene_dementia$ENTREZID)
+Dementia_PCx_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"PCx","dementia",burdengene_dementia$ENTREZID)
+
+# case-only and burden genes
+Dementia_caseonlyburden_FWM_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"FWM","dementia",list_caseonly_and_burden_all$ENTREZID)
+Dementia_caseonlyburden_TCx_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"TCx","dementia",list_caseonly_and_burden_all$ENTREZID)
+Dementia_caseonlyburden_HIP_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"HIP","dementia",list_caseonly_and_burden_all$ENTREZID)
+Dementia_caseonlyburden_PCx_combat_exp<-get_exprmat_ALLEN(ALLENexp,ALLENexp.col,"PCx","dementia",list_caseonly_and_burden_all$ENTREZID)
+```
+
+## z-score transformation & mark significantly DE genes
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+Dementia_zcore_signifgenes_FWM=get_signifgenes(Dementia_FWM_combat_exp,"FWM","dementia",fdr_threshold=0.05)
+Dementia_zcore_signifgenes_TCx=get_signifgenes(Dementia_TCx_combat_exp,"TCx","dementia",fdr_threshold=0.05)
+Dementia_zcore_signifgenes_HIP=get_signifgenes(Dementia_HIP_combat_exp,"HIP","dementia",fdr_threshold=0.05)
+Dementia_zcore_signifgenes_PCx=get_signifgenes(Dementia_PCx_combat_exp,"PCx","dementia",fdr_threshold=0.05)
+
+# case-only and burden genes
+Dementia_caseonlyburden_zcore_signifgenes_FWM=get_signifgenes(Dementia_caseonlyburden_FWM_combat_exp,"FWM","dementia",fdr_threshold=0.05)
+Dementia_caseonlyburden_zcore_signifgenes_TCx=get_signifgenes(Dementia_caseonlyburden_TCx_combat_exp,"TCx","dementia",fdr_threshold=0.05)
+Dementia_caseonlyburden_zcore_signifgenes_HIP=get_signifgenes(Dementia_caseonlyburden_HIP_combat_exp,"HIP","dementia",fdr_threshold=0.05)
+Dementia_caseonlyburden_zcore_signifgenes_PCx=get_signifgenes(Dementia_caseonlyburden_PCx_combat_exp,"PCx","dementia",fdr_threshold=0.05)
+```
+
+## Plot drawing
+
+### heatmap plot
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+pdf(paste(outPath,"/Heatmap_express_dementiavsNorm_burdenedgenes.pdf",sep = ""))
+
+#draw_heatmap_zscore(Dementia_zcore_signifgenes_FWM,"dementia","FWM",fdr_threshold = 0.05)
+draw_heatmap_zscore(Dementia_zcore_signifgenes_TCx,"dementia","TCx",fdr_threshold = 0.05)
+draw_heatmap_zscore(Dementia_zcore_signifgenes_HIP,"dementia","HIP",fdr_threshold = 0.05)
+draw_heatmap_zscore(Dementia_zcore_signifgenes_PCx,"dementia","PCx",fdr_threshold = 0.05)
+
+dev.off()
+
+# case-only and burden genes
+pdf(paste(outPath,"/Heatmap_express_dementiavsNorm_case-only_AND_burdenedgenes.pdf",sep = ""))
+
+draw_heatmap_zscore(Dementia_caseonlyburden_zcore_signifgenes_FWM,"dementia","FWM",fdr_threshold=0.05)
+draw_heatmap_zscore(Dementia_caseonlyburden_zcore_signifgenes_TCx,"dementia","TCx",fdr_threshold=0.05)
+draw_heatmap_zscore(Dementia_caseonlyburden_zcore_signifgenes_HIP,"dementia","HIP",fdr_threshold=0.05)
+#draw_heatmap_zscore(Dementia_caseonlyburden_zcore_signifgenes_PCx,"dementia","PCx",fdr_threshold=0.05)
+
+dev.off()
+```
+
+### violin plot
+
+```{r, message=FALSE, warning=FALSE}
+# burdened genes
+pdf(paste(outPath,"/Violin_express_dementiavsNorm_burdenedgenes.pdf",sep = ""))
+
+#draw_violin_plots(Dementia_zcore_signifgenes_FWM,"dementia","FWM",fdr_threshold=0.05)
+draw_violin_plots(Dementia_zcore_signifgenes_TCx,"dementia","TCx",fdr_threshold=0.05)
+draw_violin_plots(Dementia_zcore_signifgenes_HIP,"dementia","HIP",fdr_threshold=0.05)
+draw_violin_plots(Dementia_zcore_signifgenes_PCx,"dementia","PCx",fdr_threshold=0.05)
+
+dev.off()
+
+# case-only and burden genes
+pdf(paste(outPath,"/Violin_express_dementiavsNorm_case-only_AND_burdenedgenes.pdf",sep = ""))
+
+draw_violin_plots(Dementia_caseonlyburden_zcore_signifgenes_FWM,"dementia","FWM",fdr_threshold=0.05)
+draw_violin_plots(Dementia_caseonlyburden_zcore_signifgenes_TCx,"dementia","TCx",fdr_threshold=0.05)
+draw_violin_plots(Dementia_caseonlyburden_zcore_signifgenes_HIP,"dementia","HIP",fdr_threshold=0.05)
+#draw_violin_plots(Dementia_caseonlyburden_zcore_signifgenes_PCx,"dementia","PCx",fdr_threshold=0.05)
+
+dev.off()
+```
+
+## save image
+
+```{r}
+save.image("./ALLENexpdata_exploration.RData")
+```
