@@ -144,30 +144,6 @@ get_heatmatrix<-function(WGCNAmodule_enrich,ls.sig_WGCNAmodule,testing_set_name)
 
 # enrichment test
 
-## gprofiler
-
-get_module_pathway_gprofiler<-function(module_list,geneinfo){
-  enrichBP_module<-data.frame()
-  for(i in 1:length(module_list)){
-    module_df<-geneinfo[which(geneinfo$ModuleColor==module_list[i]),]
-    module_gene<-module_df$EntrezID
-    enrichBP_tmp<-gost(query = module_gene,
-                       organism = "hsapiens", ordered_query = FALSE, 
-                       multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
-                       measure_underrepresentation = FALSE, evcodes = TRUE,
-                       user_threshold = 0.1, correction_method = "gSCS", 
-                       domain_scope = "annotated", custom_bg = NULL,
-                       numeric_ns = "", sources = "GO:BP")
-    enrichBP_tmp_output<-as.data.frame(enrichBP_tmp[["result"]])
-    if(length(enrichBP_tmp[["result"]])!=0){
-      enrichBP_tmp_output<-enrichBP_tmp_output[,which(names(enrichBP_tmp_output)!="parents")]
-      enrichBP_tmp_output$ModuleColor<-rep(module_list[i],nrow(enrichBP_tmp_output))
-      enrichBP_module<-rbind(enrichBP_module,enrichBP_tmp_output)
-    }
-  }
-  return(enrichBP_module)
-}
-
 ## clusterprofiler
 
 get_module_pathway_clusterprofiler<-function(module_list,geneinfo){
