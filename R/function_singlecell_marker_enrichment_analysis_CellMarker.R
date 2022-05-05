@@ -26,7 +26,8 @@ get_genelengthGCcontent<-function(burdenresult){
 #-------------------------------------------------------------------------------
 # CellMarker: cell type marker enrichment testing
 #-------------------------------------------------------------------------------
-#' @import dplyr,magrittr,tidyverse
+
+#' @import magrittr,tidyverse
 
 # filter the cell marker genes
 
@@ -138,7 +139,26 @@ get_heatmatrix<-function(celltype_enrich,ls.sig_CellMarker,testing_set_name){
   y.padj %<>% log10 %>% multiply_by(-1)
   y.estimate<-class_list.estimate %>% matrix(., ncol = length(ls.sig_CellMarker), byrow = TRUE,dimnames=list(group_class,ls.sig_CellMarker))
   y.plt<-y.padj*y.estimate
+  
+  # mark significant status in dataframe: y.plt
+  plt.sig_statu<-y.padj
+  plt.sig_statu[plt.sig_statu <= -log10(0.1)] <- ""
+  plt.sig_statu[plt.sig_statu > -log10(0.01)] <- "***"
+  plt.sig_statu[plt.sig_statu > -log10(0.05)] <- "**"
+  plt.sig_statu[plt.sig_statu > -log10(0.1)] <- "*"
+  
+  #plt.sig_statu <- y.padj > -log10(0.1)
+  #plt.sig_statu[plt.sig_statu==FALSE] <- ""
+  #plt.sig_statu[plt.sig_statu==TRUE] <- "*"
+  
   # visualize
   coul <- colorRampPalette(brewer.pal(8, "RdPu"))(25)
-  levelplot(t(y.plt),col.regions=coul, main=testing_set_name, xlab=list("cell types",fontface='bold'), ylab=list("groups",fontface='bold'))
+  dat <- data.frame(expand.grid(x = colnames(y.plt),y = rownames(y.plt)),value=as.numeric(t(y.plt)),sig_statu=as.character(t(plt.sig_statu)))
+  Obj <- 
+    levelplot(value ~ x+y,data = dat,col.regions=coul,xlab = list("cell types",fontface='bold'),ylab = list("groups",fontface='bold'),scales=list(x=list(rot=45)),main = testing_set_name) + 
+    xyplot(y ~ x, data = dat,
+           panel = function(y, x, ...){
+             ltext(x = x, y = y, labels = dat$sig_statu, cex = 1.1, font = 1,col = '#333333')
+           })
+  print(Obj)
 }
