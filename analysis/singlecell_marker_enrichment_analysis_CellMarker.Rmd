@@ -14,13 +14,11 @@ library(biomaRt)
 library(lattice)
 library(gplots)
 library(RColorBrewer)
-library(dplyr)
 library(magrittr)
 library(tidyverse)
 
-theme_set(theme_bw())
 source("./R/function_singlecell_marker_enrichment_analysis_CellMarker.R")
-outPath <- "./results/single-cell_enrichment"
+outPath <- "./results"
 ```
 
 ################################################################################
@@ -32,9 +30,9 @@ outPath <- "./results/single-cell_enrichment"
 ## load original mutation table
 
 ```{r, message=FALSE, warning=FALSE}
-burdenresult_dementia<-read.xlsx("./metadata/burdengenes_result_extraction.xlsx",sheet = "dementia")
-burdenresult_AD<-read.xlsx("./metadata/burdengenes_result_extraction.xlsx",sheet = "AD")
-burdenresult_earlyAD<-read.xlsx("./metadata/burdengenes_result_extraction.xlsx",sheet = "ADearly")
+burdenresult_dementia<-read.xlsx("./data/burdengenes_result_extraction.xlsx",sheet = "dementia")
+burdenresult_AD<-read.xlsx("./data/burdengenes_result_extraction.xlsx",sheet = "AD")
+burdenresult_earlyAD<-read.xlsx("./data/burdengenes_result_extraction.xlsx",sheet = "ADearly")
 burdenresult_dementia$disease<-rep(0,length(burdenresult_dementia$GENE))
 burdenresult_AD$disease<-rep(0,length(burdenresult_AD$GENE))
 burdenresult_earlyAD$disease<-rep(0,length(burdenresult_earlyAD$GENE))
@@ -66,10 +64,13 @@ rm(burdenresult_dementia.entrez_id,burdenresult_AD.entrez_id,burdenresult_earlyA
 
 ```{r, message=FALSE, warning=FALSE}
 # Delete genes without mapped entrezgene_id (entrezgene_id==0)
+
 burdenresult_dementia %<>% filter(entrezgene_id!=0)
 burdenresult_AD %<>% filter(entrezgene_id!=0)
 burdenresult_earlyAD %<>% filter(entrezgene_id!=0)
+
 # Select useful columns
+
 burdenresult_dementia %<>% select(GENE,entrezgene_id,disease)
 burdenresult_AD %<>% select(GENE,entrezgene_id,disease)
 burdenresult_earlyAD %<>% select(GENE,entrezgene_id,disease)
@@ -81,7 +82,9 @@ burdenresult_earlyAD %<>% select(GENE,entrezgene_id,disease)
 mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
 mart_attribute<-listAttributes(mart)
 #Transcript length (including UTRs and CDS)
-#Gene % GC content
+
+# get gene length & GC content
+
 burdenresult_dementia<-get_genelengthGCcontent(burdenresult_dementia)
 burdenresult_AD<-get_genelengthGCcontent(burdenresult_AD)
 burdenresult_earlyAD<-get_genelengthGCcontent(burdenresult_earlyAD)
@@ -89,95 +92,41 @@ burdenresult_earlyAD<-get_genelengthGCcontent(burdenresult_earlyAD)
 rm(mart,mart_attribute)
 ```
 
-## save the background gene tables
-
-```{r, message=FALSE, warning=FALSE}
-bggene_list<-list()
-bggene_list$dementia<-burdenresult_dementia
-bggene_list$AD<-burdenresult_AD
-bggene_list$earlyAD<-burdenresult_earlyAD
-
-write.table(bggene_list,"single-cell_enrichment-analysis/annotated_background_genes.xlsx",row.names = F)
-```
-
-# optional for the background tables: directly load prepared tables
+# optional for the background tables: directly load prepared tables (the one used in this paper with more gene IDs annotated)
 
 ```{r}
-burdenresult_dementia<-read.csv("burdenresult_dementia_annotatedforLR.csv")
-burdenresult_AD<-read.csv("burdenresult_AD_annotatedforLR.csv")
-burdenresult_earlyAD<-read.csv("burdenresult_earlyAD_annotatedforLR.csv")
+burdenresult_dementia<-read.csv("./metadata/burdenresult_dementia_annotatedforLR.csv") %>% dplyr::select(c("entrez_id","ensembl_gene_id","GENE","transcript_length","percentage_gene_gc_content","P_DOM_adjustFDR"))
+burdenresult_AD<-read.csv("./metadata/burdenresult_AD_annotatedforLR.csv") %>% dplyr::select(c("entrez_id","ensembl_gene_id","GENE","transcript_length","percentage_gene_gc_content","P_DOM_adjustFDR"))
+burdenresult_earlyAD<-read.csv("./metadata/burdenresult_earlyAD_annotatedforLR.csv") %>% dplyr::select(c("entrez_id","ensembl_gene_id","GENE","transcript_length","percentage_gene_gc_content","P_DOM_adjustFDR"))
+
+colnames(burdenresult_dementia)<-c("entrezgene_id",colnames(burdenresult_dementia)[colnames(burdenresult_dementia) %!in% "entrez_id"])
+colnames(burdenresult_AD)<-c("entrezgene_id",colnames(burdenresult_AD)[colnames(burdenresult_AD) %!in% "entrez_id"])
+colnames(burdenresult_earlyAD)<-c("entrezgene_id",colnames(burdenresult_earlyAD)[colnames(burdenresult_earlyAD) %!in% "entrez_id"])
+
+burdenresult_dementia$disease<-rep(0,nrow(burdenresult_dementia))
+burdenresult_AD$disease<-rep(0,nrow(burdenresult_AD))
+burdenresult_earlyAD$disease<-rep(0,nrow(burdenresult_earlyAD))
 ```
 
 ## testing geneset preparation
 
 ```{r}
-dementia_PPI_cluster<-read.table("./metadata/BIOGRID_PPI/dementia_PPI_cluster.txt")[,1]
-AD_PPI_cluster<-read.table("./metadata/BIOGRID_PPI/AD_PPI_cluster.txt")[,1]
-earlyAD_PPI_cluster<-read.table("./metadata/BIOGRID_PPI/ADearly_PPI_cluster.txt")[,1]
+dementia_PPI_cluster<-read.table("./metadata/dementia_PPI_cluster.txt")[,1]
+AD_PPI_cluster<-read.table("./metadata/AD_PPI_cluster.txt")[,1]
+earlyAD_PPI_cluster<-read.table("./metadata/ADearly_PPI_cluster.txt")[,1]
 
-list_burden_dementia<-read.table("burdengenes_dementia_list.txt")[,1]
-list_burden_AD<-read.table("burdengenes_AD_list.txt")[,1]
-list_burden_earlyAD<-read.table("burdengenes_ADearly_list.txt")[,1]
+list_burden_dementia<-read.table("./metadata/burdengenes_dementia_list.txt")[,1]
+list_burden_AD<-read.table("./metadata/burdengenes_AD_list.txt")[,1]
+list_burden_earlyAD<-read.table("./metadata/burdengenes_ADearly_list.txt")[,1]
 
-list_caseonly_dementia<-read.table("list_TRAPD_caseonly_dementia_entrezid.txt")[,1]
-list_caseonly_AD<-read.table("list_TRAPD_caseonly_AD_entrezid.txt")[,1]
-list_caseonly_earlyAD<-read.table("list_TRAPD_caseonly_earlyAD_entrezid.txt")[,1]
-list_caseonly_and_burden_all<-read.table("list_TRAPD_caseonly_mutated_an_burdengenes_entrezid.txt")[,1]
+list_caseonly_dementia<-read.table("./metadata/list_TRAPD_caseonly_dementia_entrezid.txt")[,1]
+list_caseonly_AD<-read.table("./metadata/list_TRAPD_caseonly_AD_entrezid.txt")[,1]
+list_caseonly_earlyAD<-read.table("./metadata/list_TRAPD_caseonly_earlyAD_entrezid.txt")[,1]
+list_caseonly_and_burden_all<-read.table("./metadata/list_TRAPD_caseonly_mutated_an_burdengenes_entrezid.txt")[,1]
 
-list_case_AD<-read.table("list_case_AD_entrezid.txt")[,1]
-list_case_earlyAD<-read.table("list_case_earlyAD_entrezid.txt")[,1]
-list_case_dementia<-read.table("list_case_dementia_entrezid.txt")[,1]
-```
-
-## mark genes with disease state (0/1)
-
-```{r, message=FALSE, warning=FALSE}
-
-## Set1: burden genes
-
-burdenresult_dementia$disease<-unlist(lapply(burdenresult_dementia$P_DOM_adjustFDR,function(x){if(x<0.05){1}else{0}}))
-burdenresult_AD$disease<-unlist(lapply(burdenresult_AD$P_DOM_adjustFDR,function(x){if(x<0.05){1}else{0}}))
-burdenresult_earlyAD$disease<-unlist(lapply(burdenresult_earlyAD$P_DOM_adjustFDR,function(x){if(x<0.05){1}else{0}}))
-# OR
-burdenresult_dementia$disease<-unlist(lapply(burdenresult_dementia$entrezgene_id,function(x){if(x %in% list_burden_dementia){1}else{0}}))
-burdenresult_AD$disease<-unlist(lapply(burdenresult_AD$entrezgene_id,function(x){if(x %in% list_burden_AD){1}else{0}}))
-burdenresult_earlyAD$disease<-unlist(lapply(burdenresult_earlyAD$entrezgene_id,function(x){if(x %in% list_burden_earlyAD){1}else{0}}))
-
-## Set2: case-only mutated genes
-
-result_caseonly_dementia<-burdenresult_dementia
-result_caseonly_AD<-burdenresult_AD
-result_caseonly_earlyAD<-burdenresult_earlyAD
-
-result_caseonly_dementia$disease<-unlist(lapply(result_caseonly_dementia$entrezgene_id,function(x){if(x %in% list_caseonly_dementia){1}else{0}}))
-result_caseonly_AD$disease<-unlist(lapply(result_caseonly_AD$entrezgene_id,function(x){if(x %in% list_caseonly_AD){1}else{0}}))
-result_caseonly_earlyAD$disease<-unlist(lapply(result_caseonly_earlyAD$entrezgene_id,function(x){if(x %in% list_caseonly_earlyAD){1}else{0}}))
-
-## Set3: case-only mutated genes and burden genes from all groups
-
-result_caseonly_and_burden_all<-burdenresult_dementia
-
-result_caseonly_and_burden_all$disease<-unlist(lapply(result_caseonly_and_burden_all$entrezgene_id,function(x){if(x %in% list_caseonly_and_burden_all){1}else{0}}))
-
-# Set4: PPI cluster marking
-
-result_PPI_dementia<-burdenresult_dementia
-result_PPI_AD<-burdenresult_AD
-result_PPI_earlyAD<-burdenresult_earlyAD
-
-result_PPI_dementia$disease<-unlist(lapply(result_PPI_dementia$entrezgene_id,function(x){if(x %in% dementia_PPI_cluster){1}else{0}}))
-result_PPI_AD$disease<-unlist(lapply(result_PPI_AD$entrezgene_id,function(x){if(x %in% AD_PPI_cluster){1}else{0}}))
-result_PPI_earlyAD$disease<-unlist(lapply(result_PPI_earlyAD$entrezgene_id,function(x){if(x %in% earlyAD_PPI_cluster){1}else{0}}))
-
-# Set5: all case mutations
-
-result_case_dementia<-burdenresult_dementia
-result_case_AD<-burdenresult_AD
-result_case_earlyAD<-burdenresult_earlyAD
-
-result_case_dementia$disease<-unlist(lapply(result_case_dementia$entrezgene_id,function(x){if(x %in% list_case_dementia){1}else{0}}))
-result_case_AD$disease<-unlist(lapply(result_case_AD$entrezgene_id,function(x){if(x %in% list_case_AD){1}else{0}}))
-result_case_earlyAD$disease<-unlist(lapply(result_case_earlyAD$entrezgene_id,function(x){if(x %in% list_case_earlyAD){1}else{0}}))
+list_case_AD<-read.table("./metadata/list_case_AD_entrezid.txt")[,1]
+list_case_earlyAD<-read.table("./metadata/list_case_earlyAD_entrezid.txt")[,1]
+list_case_dementia<-read.table("./metadata/list_case_dementia_entrezid.txt")[,1]
 ```
 
 ################################################################################
@@ -189,8 +138,8 @@ result_case_earlyAD$disease<-unlist(lapply(result_case_earlyAD$entrezgene_id,fun
 ## cell type marker loading and background gene annotation
 
 ```{r, message=FALSE, warning=FALSE}
-celltype_markers.CellMarker<-read.table("./data/Human_cell_markers.txt",sep = '\t',header = T)
-celltype_markers.CellMarker_set<-read.table("./data/Single_cell_markers.txt",sep = '\t',header = T)
+celltype_markers.CellMarker<-read.table("./data/Source_CellMarker/Human_cell_markers.txt",sep = '\t',header = T)
+celltype_markers.CellMarker_set<-read.table("./data/Source_CellMarker/Single_cell_markers.txt",sep = '\t',header = T)
 ```
 
 # Section 1: filter human and normal samples from the marker list
@@ -479,10 +428,10 @@ xl_list_all_set$sig_PPI_earlyAD<-sig_CellMarker.all_set.PPI_earlyAD
 
 ## output result tables
 
-write.xlsx(xl_list_brain,"Single-cell_transcriptome/CellMarker_enrich_sig_brain.xlsx")
-write.xlsx(xl_list_brain_set,"Single-cell_transcriptome/CellMarker_enrich_sig_brain_set.xlsx")
-write.xlsx(xl_list_all,"Single-cell_transcriptome/CellMarker_enrich_sig_all.xlsx")
-write.xlsx(xl_list_all_set,"Single-cell_transcriptome/CellMarker_enrich_sig_all_set.xlsx")
+write.xlsx(xl_list_brain,"./results/CellMarker_enrich_sig_brain.xlsx")
+write.xlsx(xl_list_brain_set,"./results/CellMarker_enrich_sig_brain_set.xlsx")
+write.xlsx(xl_list_all,"./results/CellMarker_enrich_sig_all.xlsx")
+write.xlsx(xl_list_all_set,"./results/CellMarker_enrich_sig_all_set.xlsx")
 ```
 
 ################################################################################
@@ -491,7 +440,7 @@ write.xlsx(xl_list_all_set,"Single-cell_transcriptome/CellMarker_enrich_sig_all_
 #
 ################################################################################
 
-# prepare data for visualization 按group修改cell_type顺序，使保持一致
+# prepare data for visualization
 
 ## collect all the significant cell types
 
@@ -538,7 +487,6 @@ plt.PPI_earlyAD<-CellMarker_enrich_res.PPI_earlyAD %>% dplyr::filter(rownames(.)
 # res enrich plt combine
 
 plt.all<-rbind(plt.burdendementia,plt.burdenAD,plt.burdenearlyAD,plt.caseonly_dementia,plt.caseonly_AD,plt.caseonly_earlyAD,plt.case_dementia,plt.case_AD,plt.case_earlyAD,plt.PPI_dementia,plt.PPI_AD,plt.PPI_earlyAD)
-
 ```
 
 ### all_set
@@ -623,7 +571,7 @@ xl_list_sigvisual$all_set<-plt.all_set
 xl_list_sigvisual$brain<-plt.brain
 xl_list_sigvisual$brain_set<-plt.brain_set
 
-write.xlsx(xl_list_sigvisual,"Single-cell_transcriptome/CellMarker_sigvisual_table_allgroups.xlsx")
+write.xlsx(xl_list_sigvisual,"./results/CellMarker_sigvisual_table_allgroups.xlsx")
 ```
 
 # data visualization
@@ -652,10 +600,90 @@ save_trellis <- function(heatmap_plot,ls.sig_CellMarker,file_name,save_path){
 }
 
 # save plot
-save_trellis(heatmap.plt.all,ls.sig_CellMarker.all,"plot_single-cell_enrichment_CellMarker-all.pdf",outPath)
-save_trellis(heatmap.plt.all_set,ls.sig_CellMarker.all_set,"plot_single-cell_enrichment_CellMarker-all_set.pdf",outPath)
-save_trellis(heatmap.plt.brain,ls.sig_CellMarker.brain,"plot_single-cell_enrichment_CellMarker-brain.pdf",outPath)
-save_trellis(heatmap.plt.brain_set,ls.sig_CellMarker.brain_set,"plot_single-cell_enrichment_CellMarker-brain_set.pdf",outPath)
+save_trellis(heatmap.plt.all,ls.sig_CellMarker.all,"Plots/plot_single-cell_enrichment_CellMarker-all.pdf",outPath)
+save_trellis(heatmap.plt.all_set,ls.sig_CellMarker.all_set,"Plots/plot_single-cell_enrichment_CellMarker-all_set.pdf",outPath)
+save_trellis(heatmap.plt.brain,ls.sig_CellMarker.brain,"Plots/plot_single-cell_enrichment_CellMarker-brain.pdf",outPath)
+save_trellis(heatmap.plt.brain_set,ls.sig_CellMarker.brain_set,"Plots/plot_single-cell_enrichment_CellMarker-brain_set.pdf",outPath)
+```
+
+
+## output the overlapped genes in the enriched brain cell types 
+
+### filter significant brain markers overlapped genes
+
+```{r}
+sig_brain_markers.anno_AD<-celltype_markers.CellMarker.hgnormal_brain.anno_AD %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain)) %>% dplyr::filter((get(ls.sig_CellMarker.brain[1])==1)|(get(ls.sig_CellMarker.brain[2])==1))
+sig_brain_set_markers.anno_AD<-celltype_markers.CellMarker_set.hgnormal_brain.anno_AD %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain_set)) %>% dplyr::filter((get(ls.sig_CellMarker.brain_set[1])==1)|(get(ls.sig_CellMarker.brain_set[2])==1))
+
+sig_brain_markers.anno_EOAD<-celltype_markers.CellMarker.hgnormal_brain.anno_EOAD %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain)) %>% dplyr::filter((get(ls.sig_CellMarker.brain[1])==1)|(get(ls.sig_CellMarker.brain[2])==1))
+sig_brain_set_markers.anno_EOAD<-celltype_markers.CellMarker_set.hgnormal_brain.anno_EOAD %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain_set)) %>% dplyr::filter((get(ls.sig_CellMarker.brain_set[1])==1)|(get(ls.sig_CellMarker.brain_set[2])==1))
+
+sig_brain_markers.anno_dementia<-celltype_markers.CellMarker.hgnormal_brain.anno_dementia %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain)) %>% dplyr::filter((get(ls.sig_CellMarker.brain[1])==1)|(get(ls.sig_CellMarker.brain[2])==1))
+```
+
+### filter specific gene sets overlapped significant brain markers
+
+```{r}
+# method 1
+
+overlap.sig_brain_markers_caseAD<-attr(venn(list(sig_brain_markers.anno_AD$entrezgene_id,list_case_AD)), "intersections")
+overlap.sig_brain_markers_caseEOAD<-attr(venn(list(sig_brain_markers.anno_EOAD$entrezgene_id,list_case_earlyAD)), "intersections")
+overlap.sig_brain_set_markers_caseAD<-attr(venn(list(sig_brain_set_markers.anno_AD$entrezgene_id,list_case_AD)), "intersections")
+overlap.sig_brain_set_markers_caseEOAD<-attr(venn(list(sig_brain_set_markers.anno_EOAD$entrezgene_id,list_case_earlyAD)), "intersections")
+
+dementia_PPI_cluster<-read.table("BIOGRID_PPI/dementia_PPI_cluster.txt")[,1]
+overlap.sig_brain_markers_PPIdementia<-attr(venn(list(sig_brain_markers.anno_dementia$entrezgene_id,dementia_PPI_cluster)), "intersections")
+
+overlap.sig_brain_markers_caseAD<-overlap.sig_brain_markers_caseAD$`A:B`
+overlap.sig_brain_markers_caseEOAD<-overlap.sig_brain_markers_caseEOAD$`A:B`
+overlap.sig_brain_set_markers_caseAD<-overlap.sig_brain_set_markers_caseAD$`A:B`
+overlap.sig_brain_set_markers_caseEOAD<-overlap.sig_brain_set_markers_caseEOAD$`A:B`
+overlap.sig_brain_markers_PPIdementia<-overlap.sig_brain_markers_PPIdementia$`A:B`
+
+# method 2
+
+overlap.sig_brain_markers_caseAD<-sig_brain_markers.anno_AD %>% dplyr::filter(entrezgene_id %in% list_case_AD)
+overlap.sig_brain_markers_caseEOAD<-sig_brain_markers.anno_EOAD %>% dplyr::filter(entrezgene_id %in% list_case_earlyAD)
+overlap.sig_brain_set_markers_caseAD<-sig_brain_set_markers.anno_AD %>% dplyr::filter(entrezgene_id %in% list_case_AD)
+overlap.sig_brain_set_markers_caseEOAD<-sig_brain_set_markers.anno_EOAD %>% dplyr::filter(entrezgene_id %in% list_case_earlyAD)
+
+overlap.sig_brain_markers_PPIdementia<-sig_brain_markers.anno_dementia %>% dplyr::filter(entrezgene_id %in% dementia_PPI_cluster)
+```
+
+### output results
+
+```{r}
+overlap.sig_brain.list<-list()
+overlap.sig_brain.list$sigbrain_caseAD<-overlap.sig_brain_markers_caseAD
+overlap.sig_brain.list$sigbrain_caseEOAD<-overlap.sig_brain_markers_caseEOAD
+overlap.sig_brain.list$sigbrain_set_caseAD<-overlap.sig_brain_set_markers_caseAD
+overlap.sig_brain.list$sigbrain_set_caseEOAD<-overlap.sig_brain_set_markers_caseEOAD
+overlap.sig_brain.list$sigbrain_PPIdementia<-overlap.sig_brain_markers_PPIdementia
+write.xlsx(overlap.sig_brain.list,paste(outPath,"case_genesets_overlapped_significant_brainmarkers.xlsx",sep = '/'))
+```
+
+## add evidence to the ranking list
+
+```{r}
+# the previous script in "WGCNA_brainregioncombined_enrichment_analysis-GO"
+
+evidence_df<-read.xlsx("./metadata/evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+## overlap with brain cell type markers or not
+
+### brain markers
+gene_list<-celltype_markers.CellMarker.hgnormal_brain$geneID %>% unique # 600
+evidence_df$CellMarker_brainmarker_overlap<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% gene_list){1}else{0}}) %>% unlist
+
+### brain markers from set
+gene_list<-celltype_markers.CellMarker_set.hgnormal_brain$geneID %>% unique # 592
+evidence_df$CellMarker_set_brainmarker_overlap<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% gene_list){1}else{0}}) %>% unlist
+
+## enriched in the brain-related cell-types or not
+
+write.xlsx(evidence_df,"./metadata/evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "ALLENexpdata_exploration"
 ```
 
 ## save.image
