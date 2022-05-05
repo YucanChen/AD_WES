@@ -1,0 +1,440 @@
+---
+title: "spatiotemporal enrichment: data preprocessing"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## load packages & data
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+library(scatterplot3d)
+library(biomaRt)
+library(stringr)
+library(dplyr)
+library(stats)
+library(reshape2)
+library(forcats)
+library(magrittr)
+
+options(stringsAsFactors = FALSE)
+source("function_spatiotemporal_enrichment_plots.R")
+load("burdengenes_PPIpartner_extraction.RData")
+```
+
+#===============================================================================
+#
+#  Code chunk 1: spatio-temporal data loading and preprocessing
+#
+#===============================================================================
+
+## spatio-temporal data input: brainspan
+
+```{r}
+Brainspan_RNAseq <- read.csv("./data/Brainspan/genes_matrix_csv/expression_matrix.csv",header = F)
+Brainspan_RNAseq <- Brainspan_RNAseq[,-c(1)]
+Brainspan_RNAseq_col <- read.csv("./data/Brainspan/genes_matrix_csv/columns_metadata.csv")
+Brainspan_RNAseq_row <- read.csv("./data/Brainspan/genes_matrix_csv/rows_metadata.csv")
+```
+
+## data preprocessing: annotate development periods
+
+```{r}
+Brainspan_RNAseq_col.age <- Brainspan_RNAseq_col$age
+Brainspan_RNAseq_col.age <- as.data.frame(matrix(unlist(strsplit(Brainspan_RNAseq_col$age," ")),ncol=2,byrow=TRUE,dimnames = list(c(1:length(Brainspan_RNAseq_col$age)),c("number", "unit"))))
+Brainspan_RNAseq_col.age$number <- as.integer(Brainspan_RNAseq_col.age$number)
+Brainspan_RNAseq_col$developmental_period<-get_temperalperiod_list(Brainspan_RNAseq_col.age)
+
+Brainspan_RNAseq_col.age$structure <- Brainspan_RNAseq_col$structure_acronym
+Brainspan_RNAseq_col.age$developmental_period <- Brainspan_RNAseq_col$developmental_period
+Brainspan_RNAseq_col.age$structure_name <- Brainspan_RNAseq_col$structure_name
+table(Brainspan_RNAseq_col.age$developmental_period)
+```
+
+## data inspection
+
+### spatio-temporal distribution of available samples
+
+```{r}
+period_stucture_table<-get_period_stucture(Brainspan_RNAseq_col.age)
+
+write.xlsx(Brainspan_RNAseq_col.age,"./results/Brainspan_RNAseq_col.age_structure.xlsx")
+write.xlsx(period_stucture_table,"./results/Brainspan_RNAseq_period_stucture.xlsx",row.names=TRUE)
+```
+
+### prepare expression matrix using period 3-7 for hierarchical clustering of brain regions
+
+```{r}
+# period 3-7 data extraction for clustering (brain-region devided)
+
+period3_7_regionexpression_table <- get_hierarchical_expression(Brainspan_RNAseq_col.age,Brainspan_RNAseq_row,Brainspan_RNAseq)
+
+# period 3-7 data preprocessing for regional hierarchical clustering
+
+period3_7_regionexpression_table <- period3_7_regionexpression_table[,order(period3_7_regionexpression_table[1,])]
+period3_7_brainregion_table<-as.data.frame(table(as.character(period3_7_regionexpression_table[1,])))
+region_name<-unique(as.character(period3_7_regionexpression_table[1,]))
+period3_7_brainregion_table.col<-c()
+for(i in 1:length(region_name)){
+  number_sample<-paste(region_name[i],seq(from=1, to=period3_7_brainregion_table[which(period3_7_brainregion_table$Var1==region_name[i]),"Freq"], by=1),sep = "_")
+  period3_7_brainregion_table.col<-c(period3_7_brainregion_table.col,number_sample)
+}
+
+colnames(period3_7_regionexpression_table)<- period3_7_brainregion_table.col
+period3_7_regionexpression_table<-period3_7_regionexpression_table[-c(1),]
+period3_7_regionexpression_table<-apply(period3_7_regionexpression_table,1,as.numeric)
+period3_7_regionexpression_table<-as.data.frame(t(period3_7_regionexpression_table))
+colnames(period3_7_regionexpression_table)<- period3_7_brainregion_table.col
+x=as.numeric(apply(period3_7_regionexpression_table,1,sum)); x<-as.data.frame(x)
+period3_7_regionexpression_table<-cbind(period3_7_regionexpression_table,x)
+colnames(period3_7_regionexpression_table)<- c(period3_7_brainregion_table.col,"sum_expression")
+period3_7_regionexpression_table<-period3_7_regionexpression_table[which(period3_7_regionexpression_table$sum_expression!=0),]
+x=as.numeric(rownames(period3_7_regionexpression_table[which(period3_7_regionexpression_table$sum_expression<=0),]))
+summary(as.numeric(period3_7_regionexpression_table$sum_expression))
+
+period3_7_regionexpression_table<-period3_7_regionexpression_table[,1:ncol(period3_7_regionexpression_table)-1]
+
+# output result table
+
+write.csv(period3_7_regionexpression_table,"./results/period3_7_regionexpression_table.csv",row.names = F)
+```
+
+#===============================================================================
+#
+#  Code chunk 2: PCA de-outlier
+#
+#===============================================================================
+
+## PCA test for samples from period 3-7
+
+```{r}
+probesetvar = apply(period3_7_regionexpression_table, 1, var)
+ord = order(probesetvar, decreasing=TRUE)
+pca = prcomp(t(period3_7_regionexpression_table[ord,]), scale=TRUE)
+ss=summary(pca)
+pca_table<-as.data.frame(pca$x);pca_table<-apply(pca_table,2,as.numeric)
+rownames(pca_table)<-colnames(period3_7_regionexpression_table)
+
+write.xlsx(pca_table,"./results/Spatiotemperal_RNAseq_period37_PCAanalysis.xlsx",row.names=T)
+```
+
+## PCA plot drawing for samples from period 3-7
+
+```{r}
+var_explained <- pca$sdev^2/sum(pca$sdev^2)
+
+par(mfrow = c( 1, 1 ))
+plot(pca$x[,1:2],type="p",xlab=paste0("PC1: ",round(var_explained[1]*100,1),"%"),
+     ylab=paste0("PC2: ",round(var_explained[2]*100,1),"%"),
+     col=4,pch=21,main="sample PCA figure",cex.main=1)
+text(pca$x,labels = rownames(pca$x),pos = 1,offset = 0.6,cex = 0.3)
+
+scatterplot3d(pca$x[,1:3],pch=c(20),color = 4)
+text(pca$x[,1:3],labels = rownames(pca$x),cex = 0.5,pos=c(1),col="black")
+text(pca$x,labels = rownames(pca$x),pos = 4,offset = 0.6,cex = 0.5)
+```
+
+## hierarchical clustering according to regional similarity and melting the data
+
+### merge PCs of samples from the same brain regions via median values
+
+```{r}
+pca_table_merge<-pca_table[,c(1:198)]
+pca_table_merge<-t(pca_table_merge)
+brainregion_clustertable<-get_brainregion_clustertable(period3_7_regionexpression_table)
+write.xlsx(brainregion_clustertable,"./results/brainregion_period3_7_clustertable.xlsx",row.names=T)
+```
+
+### apply hclust to different brain regions
+
+```{r}
+dd <- as.dist(1 - cor(t(brainregion_clustertable),method ="spearman")^2)
+hc<-hclust(dd,method = "ward.D")
+plot(hc)
+```
+
+## process the data according to the hierarchical clustering results
+
+```{r}
+# denote the cluster components according to the clustering results
+
+cluster1<-c("A1C","ITC","STC","V1C")
+cluster2<-c("DFC","MFC","OFC","VFC")
+cluster3<-c("M1C","S1C","IPC")
+cluster4<-c("MD","CBC")
+cluster5<-c("STR","AMY","HIP")
+cluster_list<-list(cluster1,cluster2,cluster3,cluster4,cluster5)
+
+# delete samples from the ten brain regions that have null value in more than half of the periods
+
+regionselected_list<-c("Ocx","M1C-S1C","MGE","URL","CGE","DTH","LGE","PCx","TCx","CB")
+Brainspan_RNAseq<-deregion_Brainspan_RNAseq(regionselected_list,Brainspan_RNAseq,Brainspan_RNAseq_col)
+Brainspan_RNAseq_col<-deregion_Brainspan_RNAseq.col(regionselected_list,Brainspan_RNAseq_col)
+Brainspan_RNAseq_col<-mark_cluster_expressiontable(cluster_list,Brainspan_RNAseq_col)
+
+# test repeated region samples from the same donors
+
+test_table<-Brainspan_RNAseq_col[,c("donor_id","structure_acronym")]
+test_table<-test_table[order(test_table$donor_id),]
+test_table<-paste(test_table$donor_id,test_table$structure_acronym,sep = "_")
+table(test_table)
+## no repeated samples exist
+rm(test_table)
+
+# remove genes with zero expression value across all remaining brain regions
+
+x=as.numeric(apply(Brainspan_RNAseq,1,sum))
+x<-as.data.frame(x)
+Brainspan_RNAseq<-cbind(Brainspan_RNAseq,x)
+rm_rownames<-rownames(Brainspan_RNAseq[which(Brainspan_RNAseq$x==0),])
+Brainspan_RNAseq_row<-Brainspan_RNAseq_row[!(rownames(Brainspan_RNAseq_row) %in% rm_rownames),]
+Brainspan_RNAseq<-Brainspan_RNAseq[!(rownames(Brainspan_RNAseq) %in% rm_rownames),]
+Brainspan_RNAseq<-Brainspan_RNAseq[,1:length(Brainspan_RNAseq[1,])-1]
+rm(rm_rownames)
+rownames(Brainspan_RNAseq_row)<-c(1:length(Brainspan_RNAseq_row[,1]))
+Brainspan_RNAseq_row$row_num<-c(1:length(Brainspan_RNAseq_row[,1]))
+Brainspan_RNAseq_col$column_num<-c(1:length(Brainspan_RNAseq_col[,1]))
+```
+
+## PCA test for all remaining samples
+
+```{r}
+probesetvar = apply(Brainspan_RNAseq, 1, var)
+ord = order(probesetvar, decreasing=TRUE)
+pca = prcomp(t(Brainspan_RNAseq[ord,]), scale=TRUE)
+ss=summary(pca)
+pca_table<-as.data.frame(pca$x)
+
+var_explained <- pca$sdev^2/sum(pca$sdev^2)
+var_explained[1:3]
+sum(var_explained[1:37])
+# 0.6019478
+
+par(mfrow = c( 1, 1 ))
+plot(pca$x[,1:2],type="p",xlab=paste0("PC1: ",round(var_explained[1]*100,1),"%"),
+     ylab=paste0("PC2: ",round(var_explained[2]*100,1),"%"),
+     col=4,pch=21,main="sample PCA figure",cex.main=1)
+text(pca$x,labels = rownames(pca$x),pos = 2,offset = 0.6,cex = 0.3)
+
+scatterplot3d(pca$x[,1:3],pch=c(20),color = 4)
+text(pca$x[,1:3],labels = rownames(pca$x),cex = 0.5,pos=c(1),col="black")
+text(pca$x,labels = rownames(pca$x),pos = 4,offset = 0.6,cex = 0.5)
+pca_table<-pca$x;rownames(pca_table)<-c(1:length(pca$x[,1]))
+pca_table<-cbind(pca_table,as.data.frame(Brainspan_RNAseq_col$structure_acronym))
+write.csv(pca_table,"./results/Brainspan_RNAseq_PCA.csv")
+```
+
+## PCA outlier detection & removal
+
+### outlier detection: define outliers using six-time standard deviations
+
+```{r}
+var_explained[1:10]
+sum(var_explained[1:7])
+outliers=apply(pca_table[,1:7],2,function(x)which(abs(x-mean(x))>6*sd(x)))
+outliers
+
+save(list = c("pca_table","pca","var_explained"),file = "./spatiotemporal_enrichment_pcavalues.RData")
+```
+
+### outlier removal: DFC,MFC
+
+```{r}
+Brainspan_RNAseq<-Brainspan_RNAseq[,-c(331,339)]
+Brainspan_RNAseq_col<-Brainspan_RNAseq_col[-c(331,339),]
+Brainspan_RNAseq_col$column_num<-c(1:length(Brainspan_RNAseq_col[,1]))
+
+# remove genes with zero expression value across all remaining brain regions
+
+x=as.numeric(apply(Brainspan_RNAseq,1,sum))
+x<-as.data.frame(x)
+Brainspan_RNAseq<-cbind(Brainspan_RNAseq,x)
+rm_rownames<-rownames(Brainspan_RNAseq[which(Brainspan_RNAseq$x==0),])
+Brainspan_RNAseq_row<-Brainspan_RNAseq_row[!(rownames(Brainspan_RNAseq_row) %in% rm_rownames),]
+Brainspan_RNAseq<-Brainspan_RNAseq[!(rownames(Brainspan_RNAseq) %in% rm_rownames),]
+Brainspan_RNAseq<-Brainspan_RNAseq[,1:length(Brainspan_RNAseq[1,])-1]
+rm(rm_rownames)
+rownames(Brainspan_RNAseq_row)<-c(1:length(Brainspan_RNAseq_row[,1]))
+Brainspan_RNAseq_row$row_num<-c(1:length(Brainspan_RNAseq_row[,1]))
+Brainspan_RNAseq_col$column_num<-c(1:length(Brainspan_RNAseq_col[,1]))
+
+write.csv(Brainspan_RNAseq,"./results/Brainspan_RNAseq_for_analysis.csv")
+write.csv(Brainspan_RNAseq_col,"./results/Brainspan_RNAseq_col_for_analysis.csv",row.names = F)
+write.csv(Brainspan_RNAseq_row,"./results/Brainspan_RNAseq_row_for_analysis.csv",row.names = F)
+```
+
+## annotate BrainSpan genes without entriz id using metascape
+
+## after annotation, delete genes without entriz id
+
+```{r}
+Brainspan_RNAseq_row<-read.csv("./results/Brainspan_RNAseq_row_for_analysis.csv")
+
+x=Brainspan_RNAseq_row[which(Brainspan_RNAseq_row$entrez_id!="#N/A"),"row_num"]
+Brainspan_RNAseq<-Brainspan_RNAseq[x,]
+Brainspan_RNAseq_row<-Brainspan_RNAseq_row[x,]
+Brainspan_RNAseq_row$row_num<-c(1:length(Brainspan_RNAseq_row$row_num))
+x=Brainspan_RNAseq_row[which(Brainspan_RNAseq_row$entrez_id!="0"),"row_num"]
+Brainspan_RNAseq<-Brainspan_RNAseq[x,]
+Brainspan_RNAseq_row<-Brainspan_RNAseq_row[x,]
+Brainspan_RNAseq_row$row_num<-c(1:length(Brainspan_RNAseq_row$row_num))
+colnames(Brainspan_RNAseq)<-paste("num",seq(from=1,to = length(Brainspan_RNAseq[1,]),by = 1),sep = "_")
+rownames(Brainspan_RNAseq)<-Brainspan_RNAseq_row$ensembl_gene_id
+
+mart <- useDataset ("hsapiens_gene_ensembl", useMart ("ensembl")) 
+genes <- getBM(attributes=c ("ensembl_gene_id", "entrezgene_id"),filters="ensembl_gene_id", values=Brainspan_RNAseq_row$ensembl_gene_id, mart=mart) 
+rm(mart)
+
+write.csv(Brainspan_RNAseq,"./results/Brainspan_RNAseq_for_analysis_denoidgenes.csv")
+write.csv(Brainspan_RNAseq_row,"./results/Brainspan_RNAseq_row_for_analysis_denoidgenes.csv",row.names = F)
+write.csv(Brainspan_RNAseq_col,"./results/Brainspan_RNAseq_col_for_analysis_denoidgenes.csv",row.names = F)
+```
+
+### combine the multiple ensembl gene ids mapping to the same entriz id via selecting the representative one with highest expression value
+
+```{r}
+retain_ensembl<-getuniqueentrez(Brainspan_RNAseq_row,Brainspan_RNAseq)
+Brainspan_RNAseq$entrez_id<-Brainspan_RNAseq_row$entrez_id
+Brainspan_RNAseq<-Brainspan_RNAseq[which(rownames(Brainspan_RNAseq) %in% retain_ensembl),]
+Brainspan_RNAseq_row<-Brainspan_RNAseq_row[which(Brainspan_RNAseq_row$ensembl_gene_id %in% retain_ensembl),]
+rownames(Brainspan_RNAseq)<-Brainspan_RNAseq$entrez_id
+Brainspan_RNAseq<-Brainspan_RNAseq[,1:ncol(Brainspan_RNAseq)-1]
+```
+
+#===============================================================================
+#
+#  Code chunk 3: subset extraction for co-expression network construction
+#
+#===============================================================================
+
+## optional: inspect the overlap between testing gene sets and Brainspan RNAseq expressed genes
+
+```{r}
+table(burdengenes_AD_list$ENTREZID %in% Brainspan_RNAseq_row$entrez_id)
+table(burdengenes_ADearly_list$ENTREZID %in% Brainspan_RNAseq_row$entrez_id)
+table(burdengenes_dementia_list$ENTREZID %in% Brainspan_RNAseq_row$entrez_id)
+table(AD_PPI_cluster %in% Brainspan_RNAseq_row$entrez_id)
+table(dementia_PPI_cluster %in% Brainspan_RNAseq_row$entrez_id)
+table(ADearly_PPI_cluster %in% Brainspan_RNAseq_row$entrez_id)
+```
+
+## Step 1: devide the expression matrix according to the sliding windows and regional clusters
+
+```{r}
+window_len=3
+sum_windows=13-(window_len-1)
+temperal_list<-unique(Brainspan_RNAseq_col$developmental_period)
+cluster_list<-unique(Brainspan_RNAseq_col$cluster)
+
+table_list=c()
+for(i in 1:length(cluster_list)){
+  for(j in 1:sum_windows){
+    table_list<-c(table_list,paste("table_cluster",i,"_win",j,sep=""))
+  }
+}
+
+for(i in 1:length(cluster_list)){
+  for(j in 1:sum_windows){
+    table_cluster<-as.data.frame(Brainspan_RNAseq_row$entrez_id)
+    for(k in 1:length(Brainspan_RNAseq_col$donor_id)){
+      if((Brainspan_RNAseq_col[k,"cluster"]==cluster_list[i]) & (Brainspan_RNAseq_col[k,"developmental_period"] %in% temperal_list[j:(j+window_len-1)])){
+        table_cluster<-cbind(table_cluster,Brainspan_RNAseq[,k])
+      }
+    }
+    table_cluster<-table_cluster[,-c(1)]
+    rownames(table_cluster)<-rownames(Brainspan_RNAseq)
+    #de zero expression
+    x=as.numeric(apply(table_cluster,1,sum))
+    x<-as.data.frame(x)
+    table_cluster<-cbind(table_cluster,x)
+    table_cluster<-table_cluster[which(table_cluster$x!=0),]
+    table_cluster<-table_cluster[,1:length(table_cluster[1,])-1]
+    assign(paste("table_cluster",i,"_win",j,sep=""),table_cluster)
+  }
+}
+```
+
+## Step 2: inspect the variance distribution for gene filtering
+
+```{r}
+tmp.variance<-c()
+for(i in 1:5){
+  for(j in 1:sum_windows){
+    table_cluster<-get(paste("table_cluster",i,"_win",j,sep=""))
+    tmp<-screen_table_cluster_var(table_cluster)$variance
+    tmp.variance<-c(tmp.variance,tmp)
+  }
+}
+D<-sort(tmp.variance)
+summary(D)
+quantile(D,c(0.10,0.01,0.001))
+# thus, select the 0.001 quantile for downstream filtering: variance > 0.001 (1e-03)
+```
+
+## Step 3: check sample sizes (if smaller than 3, the subsets should be removed from further analyses in the next scripts)
+
+```{r}
+check_sample_res<-c()
+for(i in 1:length(cluster_list)){
+  for(j in 1:sum_windows){
+    table_cluster<-get(paste("table_cluster",i,"_win",j,sep=""))
+    tmp_res<-list(c(length(table_cluster[1,]),paste("table_cluster",i,"_win",j,sep="")))
+    check_sample_res<-c(check_sample_res,tmp_res)
+  }
+}
+check_sample_res<-t(as.data.frame(check_sample_res))
+colnames(check_sample_res)<-c("sample_size","spatiotemporal")
+check_sample_res<-as.data.frame(check_sample_res)
+check_sample_res$sample_size<-as.numeric(check_sample_res$sample_size)
+
+# report the subset to be removed
+
+check_sample_res[which(check_sample_res$sample_size<=3),"spatiotemporal"]
+## only "table_cluster5_win1"
+```
+
+## optional: check data distribution
+
+```{r}
+# Shapiro-Wilk normality test
+shapiro.test(as.numeric(table_cluster5_win3[2,]))
+shapiro.test(as.numeric(table_cluster5_win2[2,]))
+shapiro.test(as.numeric(table_cluster5_win10[2,]))
+shapiro.test(as.numeric(table_cluster1_win2[2,]))
+hist(sort(as.numeric(table_cluster1_win2[2,])),freq = TRUE)
+
+# conclusion: most do not obey normal distribution, thus need spearman test for correlation analyses
+```
+
+## Step 4: screen data via variance threshold and prepare subsets for further analyses
+
+```{r}
+for(i in 1:length(cluster_list)){
+  for(j in 1:sum_windows){
+    table_cluster<-get(paste("table_cluster",i,"_win",j,sep=""))
+    table_cluster<-screen_table_cluster_var(table_cluster)
+    table_cluster<-table_cluster[which(table_cluster$variance>0.001),]
+    assign(paste("table_cluster",i,"_win",j,sep=""),table_cluster)
+  }
+}
+
+for(i in 1:length(cluster_list)){
+  for(j in 1:sum_windows){
+    table_cluster<-get(paste("table_cluster",i,"_win",j,sep=""))
+    table_cluster<-subset(table_cluster, select=-c(variance))
+    assign(paste("table_cluster",i,"_win",j,sep=""),table_cluster)
+  }
+}
+```
+
+################################################################################
+#
+# Next scripts: scripts of co-expression network building and permutation test
+#
+################################################################################
+
+## save image
+
+```{r}
+save.image("spatiotemporal_enrichment_plots_varscreen.RData")
+```
