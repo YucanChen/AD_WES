@@ -1,0 +1,80 @@
+---
+title: "enrichment in LOF intolerant genes"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## load packages
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+library(tidyverse)
+library(magrittr)
+
+source("./R/function_enrichment_in_LOF_intolerant.R")
+```
+
+## import pLI_data: pLI_B => all background; pLI_09 => pLI > 0.9
+
+```{r}
+pLI_B <- read.csv("./data/20191208_gene_GeneticEvidence_MasterTable_foranalysis.csv")[,c(1:10,75,76)]
+pLI_B <- pLI_B[complete.cases(pLI_B[,"ExAC.all.pLI...0.9"]), ]
+pLI_09 <- pLI_B[which(pLI_B$ExAC.all.pLI...0.9==1),]
+```
+
+# gene-level enrichment test
+
+## load data <Burden genesets from TRAPD burden testing>
+
+```{r}
+burdengene_dementia <- read.csv("./metadata/list_burdengenes_dementia.csv")
+burdengene_AD <- read.csv("./metadata/list_burdengenes_AD.csv")
+burdengene_earlyAD <- read.csv("./metadata/list_burdengenes_ADearly.csv")
+
+load("./VennPlot_TRAPDvariants_caseandcontrol.RData")
+rm(casefreq_AD,casefreq_dementia,casefreq_earlyAD,freq_case,freq_control,freq_caseonly.AD,freq_caseonly.dementia,freq_caseonly.earlyAD,freq_overlap,freq_overlap.AD,freq_overlap.dementia,freq_overlap.earlyAD,combine_casefreq,list_combined_AD,list_combined_dementia,list_combined_earlyAD,mutationfreq_AD,mutationfreq_dementia,mutationfreq_earlyAD,Venn.case_AD,Venn.case_dementia,Venn.case_earlyAD,Venndata_AD,Venndata_dementia,Venndata_earlyAD,sheets)
+```
+
+## enrichment test of case-only mutated genes and burdened genes in intolerant gene list
+
+```{r}
+result_case_only_dementia<-geneset_LOF_intolerant_testing(Venndata_dementia.caseonly$`3`,pLI_09 = pLI_09,pLI_B = pLI_B)
+result_case_only_AD<-geneset_LOF_intolerant_testing(Venndata_AD.caseonly$`3`,pLI_09 = pLI_09,pLI_B = pLI_B)
+result_case_only_earlyAD<-geneset_LOF_intolerant_testing(Venndata_earlyAD.caseonly$`3`,pLI_09 = pLI_09,pLI_B = pLI_B)
+
+result_burden_dementia<-geneset_LOF_intolerant_testing(burdengene_dementia$GENE,pLI_09 = pLI_09,pLI_B = pLI_B)
+result_burden_AD<-geneset_LOF_intolerant_testing(burdengene_AD$GENE,pLI_09 = pLI_09,pLI_B = pLI_B)
+result_burden_earlyAD<-geneset_LOF_intolerant_testing(burdengene_earlyAD$GENE,pLI_09 = pLI_09,pLI_B = pLI_B)
+
+result_caseonlyandburden_all<-geneset_LOF_intolerant_testing(c(burdengene_dementia$GENE,Venndata_dementia.caseonly$`3`),pLI_09 = pLI_09,pLI_B = pLI_B)
+
+# check results
+
+result_case_only_dementia
+result_case_only_AD
+result_case_only_earlyAD
+
+result_burden_dementia
+result_burden_AD
+result_burden_earlyAD
+                                                                                                                               
+result_caseonlyandburden_all
+```
+
+## add evidence to the ranking list
+
+```{r}
+# the previous script in "burdened genes PPI partner extraction"
+
+evidence_df<-read.xlsx("./metadata/evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+evidence_df$pLI09_LOF_intolerant<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% pLI_09$X.GeneID){1}else{0}}) %>% unlist
+write.xlsx(evidence_df,"./metadata/evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "pathwaybased_enrichment_plots"
+```
+
+## save image
+
+```{r}
+save.image("./enrichment_in_LOF_intolerant.RData")
+```
