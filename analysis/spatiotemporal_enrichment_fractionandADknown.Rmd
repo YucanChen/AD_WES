@@ -11,7 +11,7 @@ library(openxlsx)
 library(dplyr)
 library(ggplot2)
 
-source("function_spatiotemporal_enrichment_fractionandADknown.R")
+source("./R/function_spatiotemporal_enrichment_fractionandADknown.R")
 outPath <- "./results"
 ```
 
