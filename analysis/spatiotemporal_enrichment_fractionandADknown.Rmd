@@ -1,0 +1,217 @@
+---
+title: "spatiotemporal enrichment result visualization: fraction and ADknown"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## load packages
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+library(dplyr)
+library(ggplot2)
+
+source("function_spatiotemporal_enrichment_fractionandADknown.R")
+outPath <- "./results"
+```
+
+################################################################################
+#
+# permutation test result processing
+#
+################################################################################
+
+## load permutation test results
+
+```{r}
+# association with AD known gene sets
+
+inPath.ADknown <- "./results/py_Permutation_results"
+res_ADknown_burdend<-read.table(paste(inPath.ADknown,"new_permures_ADknownv2_burdend_median_spearman_10000.txt",sep = '/'))
+res_ADknown_burdena<-read.table(paste(inPath.ADknown,"new_permures_ADknownv2_burdena_median_spearman_10000.txt",sep = '/'))
+res_ADknown_burdenea<-read.table(paste(inPath.ADknown,"new_permures_ADknownv2_burdenea_median_spearman_10000.txt",sep = '/'))
+res_ADknown_caseonly_all<-read.table(paste(inPath.ADknown,"new_permures_ADknownv2_caseonly_median_spearman_10000.txt",sep = '/'))
+res_ADknown_caseonly_burdend<-read.table(paste(inPath.ADknown,"new_permures_ADknownv2_caseonly_d_median_spearman_10000.txt",sep = '/'))
+res_ADknown_caseonly_burdena<-read.table(paste(inPath.ADknown,"new_permures_ADknownv2_caseonly_a_median_spearman_10000.txt",sep = '/'))
+res_ADknown_caseonly_burdenea<-read.table(paste(inPath.ADknown,"new_permures_ADknownv2_caseonly_ea_median_spearman_10000.txt",sep = '/'))
+
+# co-expression partners
+
+inPath.net <- "./results/net_thresholdcor_PPI_fractiontest"
+res_fraction_05_burdend<-read.table(paste(inPath.net,"fraction_permutationtest_d_net_coexp_threshold0.5_spearman_10000.txt",sep = '/'))
+res_fraction_05_burdena<-read.table(paste(inPath.net,"fraction_permutationtest_a_net_coexp_threshold0.5_spearman_10000.txt",sep = '/'))
+res_fraction_05_burdenea<-read.table(paste(inPath.net,"fraction_permutationtest_ea_net_coexp_threshold0.5_spearman_10000.txt",sep = '/'))
+res_fraction_05_caseonly_all<-read.table(paste(inPath.net,"fraction_permutationtest_net_coexp_threshold0.5_spearman_10000.txt",sep = '/'))
+res_fraction_05_caseonly_burdend<-read.table(paste(inPath.net,"fraction_permutationtest_caseonly_d_net_coexp_threshold0.5_spearman_10000.txt",sep = '/'))
+res_fraction_05_caseonly_burdena<-read.table(paste(inPath.net,"fraction_permutationtest_caseonly_a_net_coexp_threshold0.5_spearman_10000.txt",sep = '/'))
+res_fraction_05_caseonly_burdenea<-read.table(paste(inPath.net,"fraction_permutationtest_caseonly_ea_net_coexp_threshold0.5_spearman_10000.txt",sep = '/'))
+
+res_fraction_07_burdend<-read.table(paste(inPath.net,"fraction_permutationtest_d_net_coexp_threshold0.7_spearman_10000.txt",sep = '/'))
+res_fraction_07_burdena<-read.table(paste(inPath.net,"fraction_permutationtest_a_net_coexp_threshold0.7_spearman_10000.txt",sep = '/'))
+res_fraction_07_burdenea<-read.table(paste(inPath.net,"fraction_permutationtest_ea_net_coexp_threshold0.7_spearman_10000.txt",sep = '/'))
+res_fraction_07_caseonly_all<-read.table(paste(inPath.net,"fraction_permutationtest_net_coexp_threshold0.7_spearman_10000.txt",sep = '/'))
+res_fraction_07_caseonly_burdend<-read.table(paste(inPath.net,"fraction_permutationtest_caseonly_d_net_coexp_threshold0.7_spearman_10000.txt",sep = '/'))
+res_fraction_07_caseonly_burdena<-read.table(paste(inPath.net,"fraction_permutationtest_caseonly_a_net_coexp_threshold0.7_spearman_10000.txt",sep = '/'))
+res_fraction_07_caseonly_burdenea<-read.table(paste(inPath.net,"fraction_permutationtest_caseonly_ea_net_coexp_threshold0.7_spearman_10000.txt",sep = '/'))
+```
+
+## data format processing: permutation test
+
+```{r}
+# association with AD known gene sets (fdr adjusted p-value)
+
+df_ADknown_burdend<-formatchange_ADknown_padjust(res_ADknown_burdend)
+df_ADknown_burdena<-formatchange_ADknown_padjust(res_ADknown_burdena) # exist p.adjust < 0.1
+df_ADknown_burdenea<-formatchange_ADknown_padjust(res_ADknown_burdenea) # exist p.adjust < 0.1
+df_ADknown_caseonly_all<-formatchange_ADknown_padjust(res_ADknown_caseonly_all) # exist p.adjust < 0.1
+df_ADknown_caseonly_burdend<-formatchange_ADknown_padjust(res_ADknown_caseonly_burdend) # exist p.adjust < 0.1
+df_ADknown_caseonly_burdena<-formatchange_ADknown_padjust(res_ADknown_caseonly_burdena) # exist p.adjust < 0.1
+df_ADknown_caseonly_burdenea<-formatchange_ADknown_padjust(res_ADknown_caseonly_burdenea) # exist p.adjust < 0.1
+
+# co-expression partners (fdr adjusted p-value)
+
+df_fraction_05_burdend<-formatchange_fraction_padjust(res_fraction_05_burdend) # exist p.adjust < 0.1
+df_fraction_05_burdena<-formatchange_fraction_padjust(res_fraction_05_burdena)
+df_fraction_05_burdenea<-formatchange_fraction_padjust(res_fraction_05_burdenea)
+df_fraction_05_caseonly_all<-formatchange_fraction_padjust(res_fraction_05_caseonly_all)
+df_fraction_05_caseonly_burdend<-formatchange_fraction_padjust(res_fraction_05_caseonly_burdend) # exist p.adjust < 0.1
+df_fraction_05_caseonly_burdena<-formatchange_fraction_padjust(res_fraction_05_caseonly_burdena)
+df_fraction_05_caseonly_burdenea<-formatchange_fraction_padjust(res_fraction_05_caseonly_burdenea)
+
+df_fraction_07_burdend<-formatchange_fraction_padjust(res_fraction_07_burdend) # exist p.adjust < 0.1
+df_fraction_07_burdena<-formatchange_fraction_padjust(res_fraction_07_burdena)
+df_fraction_07_burdenea<-formatchange_fraction_padjust(res_fraction_07_burdenea)
+df_fraction_07_caseonly_all<-formatchange_fraction_padjust(res_fraction_07_caseonly_all)
+df_fraction_07_caseonly_burdend<-formatchange_fraction_padjust(res_fraction_07_caseonly_burdend)
+df_fraction_07_caseonly_burdena<-formatchange_fraction_padjust(res_fraction_07_caseonly_burdena)
+df_fraction_07_caseonly_burdenea<-formatchange_fraction_padjust(res_fraction_07_caseonly_burdenea)
+```
+
+## output processed results
+
+```{r}
+sheets = list("ADknown_burdena"=df_ADknown_burdena,"ADknown_burdenea"=df_ADknown_burdenea,"ADknown_caseonly_all"=df_ADknown_caseonly_all,"ADknown_caseonly_burdend"=df_ADknown_caseonly_burdend,"ADknown_caseonly_burdena"=df_ADknown_caseonly_burdena,"ADknown_caseonly_burdenea"=df_ADknown_caseonly_burdenea)
+
+write.xlsx(sheets,paste(outPath,"permutation10000_ADknown_sigres.xlsx",sep = '/'))
+sheets_f05 = list("05_burdend"=df_fraction_05_burdend,"05_caseonly_burdend"=df_fraction_05_caseonly_burdend)
+write.xlsx(sheets_f05,paste(outPath,"permutation10000_fraction05_sigres.xlsx",sep = '/'))
+sheets_f07 = list("07_burdend"=df_fraction_07_burdend)
+write.xlsx(sheets_f07,paste(outPath,"permutation10000_fraction07_sigres.xlsx",sep = '/'))
+```
+
+## draw the plot
+
+```{r, message=FALSE, warning=FALSE}
+draw_lineplot(df_ADknown_burdena,geneset.name = "burdened AD")
+draw_lineplot(df_ADknown_burdenea,geneset.name = "burdened EOAD")
+draw_lineplot(df_ADknown_caseonly_all,geneset.name = "caseonly all")
+draw_lineplot(df_ADknown_caseonly_burdend,geneset.name = "caseonly dementia")
+draw_lineplot(df_ADknown_caseonly_burdena,geneset.name = "caseonly AD")
+draw_lineplot(df_ADknown_caseonly_burdenea,geneset.name = "caseonly EOAD")
+
+draw_lineplot(df_fraction_05_burdend,geneset.name = "cut-off 0.5: burdened dementia")
+draw_lineplot(df_fraction_05_caseonly_burdend,geneset.name = "cut-off 0.5: caseonly dementia")
+draw_lineplot(df_fraction_07_burdend,geneset.name = "cut-off 0.7: burdened dementia")
+draw_lineplot(df_fraction_07_caseonly_burdend,geneset.name = "cut-off 0.7: caseonly dementia")
+```
+
+################################################################################
+#
+# fraction result processing
+#
+################################################################################
+
+## load spatio-temporal fraction data
+
+```{r}
+fraction_calculation_05_burdend<-read.csv(paste(inPath.net,"fraction_calculation_burdend_net_coexp_threshold0.5_spearman.csv",sep = '/'))
+fraction_calculation_05_burdena<-read.csv(paste(inPath.net,"fraction_calculation_burdena_net_coexp_threshold0.5_spearman.csv",sep = '/'))
+fraction_calculation_05_burdenea<-read.csv(paste(inPath.net,"fraction_calculation_burdenea_net_coexp_threshold0.5_spearman.csv",sep = '/'))
+fraction_calculation_05_caseonly_all<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_burden_all_net_coexp_threshold0.5_spearman.csv",sep = '/'))
+fraction_calculation_05_caseonly_burdend<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_d_net_coexp_threshold0.5_spearman.csv",sep = '/'))
+fraction_calculation_05_caseonly_burdena<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_a_net_coexp_threshold0.5_spearman.csv",sep = '/'))
+fraction_calculation_05_caseonly_burdenea<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_ea_net_coexp_threshold0.5_spearman.csv",sep = '/'))
+
+fraction_calculation_07_burdend<-read.csv(paste(inPath.net,"fraction_calculation_burdend_net_coexp_threshold0.7_spearman.csv",sep = '/'))
+fraction_calculation_07_burdena<-read.csv(paste(inPath.net,"fraction_calculation_burdena_net_coexp_threshold0.7_spearman.csv",sep = '/'))
+fraction_calculation_07_burdenea<-read.csv(paste(inPath.net,"fraction_calculation_burdenea_net_coexp_threshold0.7_spearman.csv",sep = '/'))
+fraction_calculation_07_caseonly_all<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_burden_all_net_coexp_threshold0.7_spearman.csv",sep = '/'))
+fraction_calculation_07_caseonly_burdend<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_d_net_coexp_threshold0.7_spearman.csv",sep = '/'))
+fraction_calculation_07_caseonly_burdena<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_a_net_coexp_threshold0.7_spearman.csv",sep = '/'))
+fraction_calculation_07_caseonly_burdenea<-read.csv(paste(inPath.net,"fraction_calculation_caseonly_ea_net_coexp_threshold0.7_spearman.csv",sep = '/'))
+```
+
+## data format processing: fraction
+
+```{r}
+df_fraction_calculation_05_burdend<-formatchange_fraction_calculation(fraction_calculation_05_burdend) #
+df_fraction_calculation_05_burdena<-formatchange_fraction_calculation(fraction_calculation_05_burdena)
+df_fraction_calculation_05_burdenea<-formatchange_fraction_calculation(fraction_calculation_05_burdenea)
+df_fraction_calculation_05_caseonly_all<-formatchange_fraction_calculation(fraction_calculation_05_caseonly_all)
+df_fraction_calculation_05_caseonly_burdend<-formatchange_fraction_calculation(fraction_calculation_05_caseonly_burdend) #
+df_fraction_calculation_05_caseonly_burdena<-formatchange_fraction_calculation(fraction_calculation_05_caseonly_burdena)
+df_fraction_calculation_05_caseonly_burdenea<-formatchange_fraction_calculation(fraction_calculation_05_caseonly_burdenea)
+
+df_fraction_calculation_07_burdend<-formatchange_fraction_calculation(fraction_calculation_07_burdend) #
+df_fraction_calculation_07_burdena<-formatchange_fraction_calculation(fraction_calculation_07_burdena)
+df_fraction_calculation_07_burdenea<-formatchange_fraction_calculation(fraction_calculation_07_burdenea)
+df_fraction_calculation_07_caseonly_all<-formatchange_fraction_calculation(fraction_calculation_07_caseonly_all)
+df_fraction_calculation_07_caseonly_burdend<-formatchange_fraction_calculation(fraction_calculation_07_caseonly_burdend)
+df_fraction_calculation_07_caseonly_burdena<-formatchange_fraction_calculation(fraction_calculation_07_caseonly_burdena)
+df_fraction_calculation_07_caseonly_burdenea<-formatchange_fraction_calculation(fraction_calculation_07_caseonly_burdenea)
+```
+
+## draw the plot
+
+```{r, message=FALSE, warning=FALSE}
+draw_lineplot_fraction_calculation(df_fraction_calculation_05_burdend,df_fraction_05_burdend,geneset.name = "cut-off 0.5: burdened dementia")
+draw_lineplot_fraction_calculation(df_fraction_calculation_05_caseonly_burdend,df_fraction_05_caseonly_burdend,geneset.name = "cut-off 0.5: caseonly dementia")
+draw_lineplot_fraction_calculation(df_fraction_calculation_07_burdend,df_fraction_07_burdend,geneset.name = "cut-off 0.7: burdened dementia")
+draw_lineplot_fraction_calculation(df_fraction_calculation_07_caseonly_burdend,df_fraction_07_caseonly_burdend,geneset.name = "cut-off 0.7: caseonly dementia")
+
+draw_lineplot_fraction_calculation(df_fraction_calculation_05_burdena,df_fraction_05_burdena,geneset.name = "cut-off 0.5: burdened AD")
+draw_lineplot_fraction_calculation(df_fraction_calculation_05_burdenea,df_fraction_05_burdenea,geneset.name = "cut-off 0.5: burdened EOAD")
+draw_lineplot_fraction_calculation(df_fraction_calculation_07_burdena,df_fraction_07_burdena,geneset.name = "cut-off 0.7: burdened AD")
+draw_lineplot_fraction_calculation(df_fraction_calculation_07_burdenea,df_fraction_07_burdenea,geneset.name = "cut-off 0.7: burdened EOAD")
+```
+
+## add evidence to the ranking list
+
+```{r}
+# the previous script in "pathwaybased_enrichment_plots"
+
+# load network data (filtered from spatiotemporal PPI network building with cutoff)
+
+## cutoff: 0.5
+caseonly_05_c3w11<-read.table("./results/net_thresholdcor_PPI_specificsets/addADknown_caseonlyd_net_coexp_threshold0.5_spearman_cluster3_win11.txt",header = T)
+burdened_05_c4w3<-read.table("./results/net_thresholdcor_PPI_specificsets/addADknown_burdend_net_coexp_threshold0.5_spearman_cluster4_win3.txt",header = T)
+burdened_05_c4w11<-read.table("./results/net_thresholdcor_PPI_specificsets/addADknown_burdend_net_coexp_threshold0.5_spearman_cluster4_win11.txt",header = T)
+burdened_05_c5w7<-read.table("./results/net_thresholdcor_PPI_specificsets/addADknown_burdend_net_coexp_threshold0.5_spearman_cluster5_win7.txt",header = T)
+burdened_05_c5w8<-read.table("./results/net_thresholdcor_PPI_specificsets/addADknown_burdend_net_coexp_threshold0.5_spearman_cluster5_win8.txt",header = T)
+
+## cutoff: 0.7
+burdened_07_c5w7<-read.table("./results/net_thresholdcor_PPI_specificsets/addADknown_burdend_net_coexp_threshold0.7_spearman_cluster5_win7.txt",header = T)
+burdened_07_c5w8<-read.table("./results/net_thresholdcor_PPI_specificsets/addADknown_burdend_net_coexp_threshold0.7_spearman_cluster5_win8.txt",header = T)
+
+# count AD known gene partners in the enriched networks respectively
+
+evidence_df<-read.xlsx("./metadata/evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+evidence_df$spatiotemporal_caseonly_05_c3w11<-evidence_df$ENTREZID %>% lapply(.,function(x){if((x %in% caseonly_05_c3w11$gene1)|(x %in% caseonly_05_c3w11$gene2)){nrow(caseonly_05_c3w11[which((x==caseonly_05_c3w11$gene1)|(x==caseonly_05_c3w11$gene2)),])}else{0}}) %>% unlist
+evidence_df$spatiotemporal_burdened_05_c4w3<-evidence_df$ENTREZID %>% lapply(.,function(x){if((x %in% burdened_05_c4w3$gene1)|(x %in% burdened_05_c4w3$gene2)){nrow(burdened_05_c4w3[which((x==burdened_05_c4w3$gene1)|(x==burdened_05_c4w3$gene2)),])}else{0}}) %>% unlist
+evidence_df$spatiotemporal_burdened_05_c4w11<-evidence_df$ENTREZID %>% lapply(.,function(x){if((x %in% burdened_05_c4w11$gene1)|(x %in% burdened_05_c4w11$gene2)){nrow(burdened_05_c4w11[which((x==burdened_05_c4w11$gene1)|(x==burdened_05_c4w11$gene2)),])}else{0}}) %>% unlist
+evidence_df$spatiotemporal_burdened_05_c5w7<-evidence_df$ENTREZID %>% lapply(.,function(x){if((x %in% burdened_05_c5w7$gene1)|(x %in% burdened_05_c5w7$gene2)){nrow(burdened_05_c5w7[which((x==burdened_05_c5w7$gene1)|(x==burdened_05_c5w7$gene2)),])}else{0}}) %>% unlist
+evidence_df$spatiotemporal_burdened_05_c5w8<-evidence_df$ENTREZID %>% lapply(.,function(x){if((x %in% burdened_05_c5w8$gene1)|(x %in% burdened_05_c5w8$gene2)){nrow(burdened_05_c5w8[which((x==burdened_05_c5w8$gene1)|(x==burdened_05_c5w8$gene2)),])}else{0}}) %>% unlist
+evidence_df$spatiotemporal_burdened_07_c5w7<-evidence_df$ENTREZID %>% lapply(.,function(x){if((x %in% burdened_07_c5w7$gene1)|(x %in% burdened_07_c5w7$gene2)){nrow(burdened_07_c5w7[which((x==burdened_07_c5w7$gene1)|(x==burdened_07_c5w7$gene2)),])}else{0}}) %>% unlist
+evidence_df$spatiotemporal_burdened_07_c5w8<-evidence_df$ENTREZID %>% lapply(.,function(x){if((x %in% burdened_07_c5w8$gene1)|(x %in% burdened_07_c5w8$gene2)){nrow(burdened_07_c5w8[which((x==burdened_07_c5w8$gene1)|(x==burdened_07_c5w8$gene2)),])}else{0}}) %>% unlist
+
+write.xlsx(evidence_df,"./metadata/evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "WGCNA_brainregioncombined_enrichment_analysis-GO"
+```
+
+## save image
+
+```{r}
+save.image("spatiotemporal_enrichment_fractionandADknown.RData")
+```
