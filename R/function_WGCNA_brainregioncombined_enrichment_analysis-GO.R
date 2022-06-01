@@ -120,10 +120,10 @@ get_heatmatrix<-function(WGCNAmodule_enrich,ls.sig_WGCNAmodule,testing_set_name)
   y.plt<-y.padj*y.estimate
   # mark significant status in dataframe: y.plt
   plt.sig_statu<-y.padj
-  plt.sig_statu[plt.sig_statu <= -log10(0.1)] <- ""
-  plt.sig_statu[plt.sig_statu > -log10(0.01)] <- "***"
-  plt.sig_statu[plt.sig_statu > -log10(0.05)] <- "**"
-  plt.sig_statu[plt.sig_statu > -log10(0.1)] <- "*"
+  plt.sig_statu[y.padj <= -log10(0.1)] <- ""
+  plt.sig_statu[y.padj > -log10(0.001)] <- "***"
+  plt.sig_statu[(y.padj > -log10(0.05))&(y.padj <= -log10(0.001))] <- "**"
+  plt.sig_statu[(y.padj > -log10(0.1))&(y.padj <= -log10(0.05))] <- "*"
   # visualize
   coul <- colorRampPalette(brewer.pal(8, "BuPu"))(25)
   dat <- data.frame(expand.grid(x = colnames(y.plt),y = rownames(y.plt)),value=as.numeric(t(y.plt)),sig_statu=as.character(t(plt.sig_statu)))
