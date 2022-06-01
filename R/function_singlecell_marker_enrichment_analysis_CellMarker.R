@@ -142,10 +142,10 @@ get_heatmatrix<-function(celltype_enrich,ls.sig_CellMarker,testing_set_name){
   
   # mark significant status in dataframe: y.plt
   plt.sig_statu<-y.padj
-  plt.sig_statu[plt.sig_statu <= -log10(0.1)] <- ""
-  plt.sig_statu[plt.sig_statu > -log10(0.01)] <- "***"
-  plt.sig_statu[plt.sig_statu > -log10(0.05)] <- "**"
-  plt.sig_statu[plt.sig_statu > -log10(0.1)] <- "*"
+  plt.sig_statu[y.padj <= -log10(0.1)] <- ""
+  plt.sig_statu[y.padj > -log10(0.001)] <- "***"
+  plt.sig_statu[(y.padj > -log10(0.05))&(y.padj <= -log10(0.001))] <- "**"
+  plt.sig_statu[(y.padj > -log10(0.1))&(y.padj <= -log10(0.05))] <- "*"
   
   #plt.sig_statu <- y.padj > -log10(0.1)
   #plt.sig_statu[plt.sig_statu==FALSE] <- ""
