@@ -1,0 +1,188 @@
+---
+title: "burdened genes PPI partner extraction"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+library(biomaRt)
+suppressPackageStartupMessages(library(clusterProfiler))
+suppressPackageStartupMessages(library(org.Hs.eg.db))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+
+inPath<-'/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/burden_test'
+outPath<-'/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627'
+```
+
+## load data
+
+```{r}
+## significant gene import
+
+burdengenes_dementia_list=read.xlsx(paste(inPath,"list_burdengenes_AD_dementia.xlsx",sep = '/'),sheet = 'dementia')
+burdengenes_AD_list=read.xlsx(paste(inPath,"list_burdengenes_AD_dementia.xlsx",sep = '/'),sheet = 'AD')
+# Note: to annotate the ENTREZID of genes in the table before loading them
+
+## BIOGRID PPI data import:
+
+human_BIOGRID_PPI <- read.csv("/reference/BIOGRID/BIOGRID-ALL-4.2.192_human.tab.csv")
+```
+
+## ID transformation: burden genes and PPI genes
+
+```{r}
+#burden genes
+human_BIOGRID_PPI.ENTREZID_A <- bitr(human_BIOGRID_PPI$OFFICIAL_SYMBOL_A, fromType = "SYMBOL",
+                                           toType = c("ENTREZID"), 
+                                           OrgDb = org.Hs.eg.db)
+
+human_BIOGRID_PPI.ENTREZID_B <- bitr(human_BIOGRID_PPI$OFFICIAL_SYMBOL_B, fromType = "SYMBOL",
+                                     toType = c("ENTREZID"), 
+                                     OrgDb = org.Hs.eg.db)
+burdengenes_dementia_list$ENTREZID %in% human_BIOGRID_PPI.ENTREZID_A$ENTREZID
+burdengenes_dementia_list$ENTREZID %in% human_BIOGRID_PPI.ENTREZID_B$ENTREZID
+
+human_BIOGRID_PPI$ENTREZID_A <- apply(human_BIOGRID_PPI,1,function(x){if(x[3] %in% human_BIOGRID_PPI.ENTREZID_A$SYMBOL){human_BIOGRID_PPI.ENTREZID_A[which(human_BIOGRID_PPI.ENTREZID_A$SYMBOL==x[3]),"ENTREZID"]}else{"NA"}})
+human_BIOGRID_PPI$ENTREZID_B <- apply(human_BIOGRID_PPI,1,function(x){if(x[4] %in% human_BIOGRID_PPI.ENTREZID_B$SYMBOL){human_BIOGRID_PPI.ENTREZID_B[which(human_BIOGRID_PPI.ENTREZID_B$SYMBOL==x[4]),"ENTREZID"]}else{"NA"}})
+human_BIOGRID_PPI$ENTREZID_A <- unlist(as.character(human_BIOGRID_PPI$ENTREZID_A))
+human_BIOGRID_PPI$ENTREZID_B <- unlist(as.character(human_BIOGRID_PPI$ENTREZID_B))
+human_BIOGRID_PPI <- human_BIOGRID_PPI[order(human_BIOGRID_PPI$ENTREZID_A),]
+#write.csv(human_BIOGRID_PPI,"/reference/BIOGRID/BIOGRID-ALL-4.2.192_human.tab.csv",row.names = FALSE)
+#write.table(human_BIOGRID_PPI,"/reference/BIOGRID/BIOGRID-ALL-4.2.192_human.tab_entrzadd.txt",row.names = FALSE,sep = '\t')
+
+human_BIOGRID_PPI<-read.csv("/reference/BIOGRID/BIOGRID-ALL-4.2.192_human.tab.csv")
+human_BIOGRID_PPI<-human_BIOGRID_PPI[1:644241,]
+write.csv(human_BIOGRID_PPI,"/reference/BIOGRID/BIOGRID-ALL-4.2.192_human.tab_final.csv",row.names = FALSE)
+table(burdengenes_dementia_list$ENTREZID %in% human_BIOGRID_PPI$ENTREZID_A)
+table(burdengenes_dementia_list$ENTREZID %in% human_BIOGRID_PPI$ENTREZID_B)
+burdengenes_dementia_list$ENTREZID <- as.character(burdengenes_dementia_list$ENTREZID)
+burdengenes_AD_list$ENTREZID <- as.character(burdengenes_AD_list$ENTREZID)
+```
+
+## PPI interaction genes extraction
+
+```{r}
+human_BIOGRID_PPI<-read.csv("/reference/BIOGRID/BIOGRID-ALL-4.2.192_human.tab_final.csv")
+
+AD_PPI_partners=unlist(apply(burdengenes_AD_list,1,function(x){if(x[3] %in% human_BIOGRID_PPI$ENTREZID_A){human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_A==x[3]),"ENTREZID_B"]}else{"NA"}}))
+AD_PPI_partners=c(AD_PPI_partners,unlist(apply(burdengenes_AD_list,1,function(x){if(x[3] %in% human_BIOGRID_PPI$ENTREZID_B){human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_B==x[3]),"ENTREZID_A"]}else{"NA"}})))
+AD_PPI_partners=unique(AD_PPI_partners)
+AD_PPI_partners=na.omit(AD_PPI_partners)
+AD_PPI_partners=AD_PPI_partners[which(AD_PPI_partners!="NA")]
+
+dementia_PPI_partners=unlist(apply(burdengenes_dementia_list,1,function(x){if(x[3] %in% human_BIOGRID_PPI$ENTREZID_A){human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_A==x[3]),"ENTREZID_B"]}else{"NA"}}))
+dementia_PPI_partners=c(dementia_PPI_partners,unlist(apply(burdengenes_dementia_list,1,function(x){if(x[3] %in% human_BIOGRID_PPI$ENTREZID_B){human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_B==x[3]),"ENTREZID_A"]}else{"NA"}})))
+dementia_PPI_partners=unique(dementia_PPI_partners)
+dementia_PPI_partners=na.omit(dementia_PPI_partners)
+dementia_PPI_partners=dementia_PPI_partners[which(dementia_PPI_partners!="NA")]
+
+AD_PPI_cluster=c(AD_PPI_partners,burdengenes_AD_list$ENTREZID)
+dementia_PPI_cluster=c(dementia_PPI_partners,burdengenes_dementia_list$ENTREZID)
+
+AD_PPI_cluster=unique(AD_PPI_cluster)
+dementia_PPI_cluster=unique(dementia_PPI_cluster)
+```
+
+## output geneset results
+
+```{r}
+write.table(dementia_PPI_cluster,paste(outPath,"BIOGRID_PPI/dementia_PPI_cluster.txt",sep = '/'),sep = '\t',row.names = FALSE,col.names = FALSE,quote = FALSE)
+write.table(dementia_PPI_partners,paste(outPath,"BIOGRID_PPI/dementia_PPI_partners.txt",sep = '/'),sep = '\t',row.names = FALSE,col.names = FALSE,quote = FALSE)
+write.table(AD_PPI_cluster,paste(outPath,"BIOGRID_PPI/AD_PPI_cluster.txt",sep = '/'),sep = '\t',row.names = FALSE,col.names = FALSE,quote = FALSE)
+write.table(AD_PPI_partners,paste(outPath,"BIOGRID_PPI/AD_PPI_partners.txt",sep = '/'),sep = '\t',row.names = FALSE,col.names = FALSE,quote = FALSE)
+```
+
+## network data preparation
+
+```{r}
+AD_PPI_net=data.frame()
+tmp=data.frame()
+for(i in 1:length(burdengenes_AD_list$ENTREZID)){
+  if(burdengenes_AD_list[i,"ENTREZID"] %in% human_BIOGRID_PPI$ENTREZID_A){
+    tmp=human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_A==burdengenes_AD_list[i,"ENTREZID"]),]
+  }
+  else{tmp=data.frame()}
+  AD_PPI_net=rbind(AD_PPI_net,tmp)
+  
+  if(burdengenes_AD_list[i,"ENTREZID"] %in% human_BIOGRID_PPI$ENTREZID_B){
+    tmp=human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_B==burdengenes_AD_list[i,"ENTREZID"]),]
+  }
+  else{tmp=data.frame()}
+  AD_PPI_net=rbind(AD_PPI_net,tmp)
+}
+
+dementia_PPI_net=data.frame()
+tmp=data.frame()
+for(i in 1:length(burdengenes_dementia_list$ENTREZID)){
+  if(burdengenes_dementia_list[i,"ENTREZID"] %in% human_BIOGRID_PPI$ENTREZID_A){
+    tmp=human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_A==burdengenes_dementia_list[i,"ENTREZID"]),]
+  }
+  else{tmp=data.frame()}
+  dementia_PPI_net=rbind(dementia_PPI_net,tmp)
+  
+  if(burdengenes_dementia_list[i,"ENTREZID"] %in% human_BIOGRID_PPI$ENTREZID_B){
+    tmp=human_BIOGRID_PPI[which(human_BIOGRID_PPI$ENTREZID_B==burdengenes_dementia_list[i,"ENTREZID"]),]
+  }
+  else{tmp=data.frame()}
+  dementia_PPI_net=rbind(dementia_PPI_net,tmp)
+}
+```
+
+## network data output
+
+```{r}
+net_list<-list()
+net_list$dementia_PPI <- dementia_PPI_net
+net_list$AD_PPI <- AD_PPI_net
+write.xlsx(net_list,paste(outPath,"BIOGRID_PPI/net_allsets_BIOGRID_PPI.xlsx",sep = '/'))
+```
+
+## filter PPI pairs overlapped with AD known genes
+
+```{r, message=FALSE, warning=FALSE}
+AD_known_genes<-read.table("AD_knownsig_geneset_v2.txt")[,1]
+
+overlap_net.dementia_PPI<-dementia_PPI_net[which((dementia_PPI_net$ENTREZID_A %in% AD_known_genes)|(dementia_PPI_net$ENTREZID_B %in% AD_known_genes)),] %>% group_by(OFFICIAL_SYMBOL_A,OFFICIAL_SYMBOL_B,ENTREZID_A,ENTREZID_B) %>% summarise() %>% as.data.frame
+overlap_net.AD_PPI<-AD_PPI_net[which((AD_PPI_net$ENTREZID_A %in% AD_known_genes)|(AD_PPI_net$ENTREZID_B %in% AD_known_genes)),] %>% group_by(OFFICIAL_SYMBOL_A,OFFICIAL_SYMBOL_B,ENTREZID_A,ENTREZID_B) %>% summarise() %>% as.data.frame
+
+overlap.list<-list()
+overlap.list$all_burdened_genes<-burdengenes_dementia_list
+overlap.list$dementia<-overlap_net.dementia_PPI
+overlap.list$AD<-overlap_net.AD_PPI
+write.xlsx(overlap.list,paste(outPath,"BIOGRID_PPI/burdened-genes_overlapped_PPI-pairs_with_ADknown-genes_all.xlsx",sep = '/'))
+```
+
+## add evidence to the ranking list
+
+```{r}
+# first script for extracting the evidence list
+
+evidence_df<-read.xlsx(paste(inPath,"list_TRAPD_caseonly_mutatedgenes_an_burdengenes.xlsx",sep = '/'),sheet = 'all.caseonly_an_burdened')
+caseonly_mutated_genes<-read.xlsx(paste(inPath,"list_TRAPD_caseonly_mutatedgenes_an_burdengenes.xlsx",sep = '/'),sheet = 'all.caseonly')
+
+evidence_df$burdened_dementia<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% burdengenes_dementia_list$ENTREZID){1}else{0}}) %>% unlist
+evidence_df$burdened_AD<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% burdengenes_AD_list$ENTREZID){1}else{0}}) %>% unlist
+evidence_df$caseonly_mutated<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% caseonly_mutated_genes$ENTREZID){1}else{0}}) %>% unlist
+evidence_df %<>% arrange(desc(caseonly_mutated)) %>% arrange(desc(burdened_dementia)) %>% arrange(desc(burdened_AD))
+evidence_df$PPI_overlap_with_ADknowngenes<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% c(overlap_net.dementia_PPI$ENTREZID_A,overlap_net.dementia_PPI$ENTREZID_B)){1}else{0}}) %>% unlist
+
+write.xlsx(evidence_df,"evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "enrichment in LOF intolerant genes"
+```
+
+## save.image
+
+```{r}
+save(AD_PPI_cluster,AD_PPI_partners,dementia_PPI_partners,dementia_PPI_cluster,file = "R03_burdengenes_PPIpartner_extraction.genesets.RData")
+rm(human_BIOGRID_PPI,i,tmp,human_BIOGRID_PPI.ENTREZID_A,human_BIOGRID_PPI.ENTREZID_B,net_list)
+#write.csv(human_BIOGRID_PPI,"F:/Lin_Lab/reference/BIOGRID/BIOGRID-ALL-4.2.192_human.tab_final.csv",row.names = FALSE)
+
+save.image("R03_burdengenes_PPIpartner_extraction.RData")
+```
