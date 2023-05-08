@@ -1,0 +1,130 @@
+---
+title: "Xhmm CNV calling result exploration"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+library(tibble)
+
+outPath <- "/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/CNV_calling_result_exploration"
+# need change when upload! => outPath <- "ALLENdata_disease_exploration"
+```
+
+## load data
+
+```{r}
+CNV_annotated.dementia<-read.table("/AD_exome/WES_CNVcalling/WES_CNVcalling_3rdadjust/CNV_annotation/dementia.cnv.annovar.hg38_multianno.txt",sep = '\t',header = T)
+CNV_annotated.AD<-read.table("/AD_exome/WES_CNVcalling/WES_CNVcalling_3rdadjust/CNV_annotation/AD.cnv.annovar.hg38_multianno.txt",sep = '\t',header = T)
+```
+
+## extract affected genes
+
+```{r}
+CNV_annotated_genes.dementia<-CNV_annotated.dementia$Gene.refGene %>% lapply(.,function(x){strsplit(x,";",fixed = TRUE)}) %>% unlist %>% unique
+CNV_annotated_genes.AD<-CNV_annotated.AD$Gene.refGene %>% lapply(.,function(x){strsplit(x,";",fixed = TRUE)}) %>% unlist %>% unique
+
+write.table(CNV_annotated_genes.dementia,paste(outPath,"CNV_annotated_genes.dementia.symbol.txt",sep = '/'),row.names = F,col.names = F,quote = F)
+write.table(CNV_annotated_genes.AD,paste(outPath,"CNV_annotated_genes.AD.symbol.txt",sep = '/'),row.names = F,col.names = F,quote = F)
+```
+
+## ID conversion: use results from Metascape
+
+```{r}
+CNV_annotated_genes.dementia.ENTREZID <- read.xlsx(paste(outPath,"metascape_result_dementia_CNVgenes.xlsx",sep = '/'))
+CNV_annotated_genes.AD.ENTREZID <- read.xlsx(paste(outPath,"metascape_result_AD_CNVgenes.xlsx",sep = '/'))
+```
+
+## add evidence to the ranking list
+
+```{r}
+# the previous script in "New_part4_1_ALLENexpdata_exploration"
+
+evidence_df<-read.xlsx("evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+evidence_df$CNV_matched_dementia<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% CNV_annotated_genes.dementia.ENTREZID$Gene.ID){1}else{0}}) %>% unlist
+evidence_df$CNV_matched_AD<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% CNV_annotated_genes.AD.ENTREZID$Gene.ID){1}else{0}}) %>% unlist
+
+write.xlsx(evidence_df,"evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# finish evidence adding!
+```
+
+## add gene-level functional annotation to the ranking list
+
+```{r}
+evidence_df.annotated_genefunction<-read.xlsx("evidence-ranking_table_all-case-only-and-burdened-genes_metascape-annotated.xlsx")
+
+evidence_df.add<-evidence_df$GENE %>% lapply(.,function(x){evidence_df.annotated_genefunction[which(evidence_df.annotated_genefunction$MyList==x),c("MyList","Description","Biological.Process.(GO)","Protein.Function.(Protein.Atlas)","Subcellular.Location.(Protein.Atlas)","Drug.(DrugBank)")]})
+
+evidence_df.add.df<-data.frame()
+for(i in 1:length(evidence_df.add)){
+  tmp<-evidence_df.add[i][[1]] %>% as.data.frame
+  evidence_df.add.df<-rbind(evidence_df.add.df,tmp)
+}
+colnames(evidence_df.add.df)<-c("GENE","Description","GO-BP","Protein.Function.Protein.Atlas","Subcellular.Location.Protein.Atlas","Drug.DrugBank")
+evidence_df.new<-add_column(evidence_df,evidence_df.add.df %>% dplyr::select(!("GENE")),.after = "ENTREZID")
+
+rm(evidence_df.add,evidence_df.add.df,tmp,evidence_df.annotated_genefunction)
+
+write.xlsx(evidence_df.new,"evidence-ranking_table_all-case-only-and-burdened-genes_functionannotated.xlsx")
+```
+
+## statistical analyzing the results
+
+```{r}
+#evidence.colsum<-evidence_df.new %>% dplyr::select("burdened_genes":"CNV_matched_earlyAD") %>% colSums %>% as.data.frame
+
+# scale the column values
+
+evidence_df.new.scaled<-evidence_df.new
+
+#scale.cols<-evidence_df.new.scaled %>% dplyr::select("spatiotemporal_caseonly_05_c3w11":"spatiotemporal_burdened_07_c5w8") %>% colnames
+#for(i in 1:length(scale.cols)){
+#  evidence_df.new.scaled[scale.cols[i]] %<>% scale(.,center = F,scale = T) %>% as.numeric
+#}
+
+#divide.cols<-evidence_df.new.scaled %>% dplyr::select("spatiotemporal_burdened_05_c4w3":"spatiotemporal_burdened_07_c5w8") %>% colnames
+#for(i in 1:length(divide.cols)){
+#  evidence_df.new.scaled[divide.cols[i]] %<>% divide_by(.,3)
+#}
+
+#evidence.scaled.colsum<-evidence_df.new.scaled %>% dplyr::select("burdened_genes":"CNV_matched_earlyAD") %>% colSums %>% as.data.frame
+
+DE.cols<-evidence_df.new.scaled %>% dplyr::select(ADvsNorm_DE,DementiavsNorm_DE) %>% colnames
+for(i in 1:length(DE.cols)){
+  evidence_df.new.scaled[DE.cols[i]] %<>% divide_by(.,2)
+}
+```
+
+## add sum evidence ranking
+
+```{r}
+# add rowsum
+#evidence_df.new.scaled$evidence_despatiotemporal<-evidence_df.new.scaled %>% dplyr::select("burdened_genes":"CNV_matched_earlyAD") %>% dplyr::select(!(all_of(scale.cols))) %>% rowSums
+
+evidence_df.new.scaled$evidence_sum<-evidence_df.new.scaled %>% dplyr::select("burdened_dementia":"CNV_matched_AD") %>% rowSums
+```
+
+## collective output
+
+```{r}
+outlist<-list()
+outlist$evidence_df_annotatedscaled_sum<-evidence_df.new.scaled %>% dplyr::arrange(desc(evidence_sum))
+outlist$evidence_df_funcannotated<-evidence_df.new
+outlist$evidence_df_pure<-evidence_df
+write.xlsx(outlist,"evidence-ranking_table_all-case-only-and-burdened-genes_funcannotated-sumevidence.xlsx")
+```
+
+## save image
+
+```{r}
+save.image("R09_CNV_calling_result_exploration.RData")
+```
