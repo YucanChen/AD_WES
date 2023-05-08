@@ -1,0 +1,93 @@
+---
+title: "case-only mutated gene extraction"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+
+inPath.AD <- '/AD_exome/CYC_recall_batch2/WES_analysis_3rdadjust/burden_test/case_3rdadjust_AD'
+inPath.dementia <- '/AD_exome/CYC_recall_batch2/WES_analysis/burden_test/case_batch2_dementia'
+outPath <- '/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/burden_test'
+```
+
+## load data
+
+```{r}
+# load outfile of AD and dementia groups
+
+outfile.AD.case<-read.table(paste(inPath.AD,'WES_highquality_hg38_sorted_AD.all_deXY_PAVcal_inmaf.filter.outfile.txt',sep = '/')) %>% dplyr::rename(.,c(GENE=V1,SNVS=V2))
+outfile.AD.control<-read.table(paste(inPath.AD,'gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTVcal.filter.outfile.txt',sep = '/')) %>% dplyr::rename(.,c(GENE=V1,SNVS=V2))
+outfile.dementia.case<-read.table(paste(inPath.dementia,'WES_highquality_hg38_sorted.all_deXY_PAVcal_inmaf.filter.outfile.txt',sep = '/')) %>% dplyr::rename(.,c(GENE=V1,SNVS=V2))
+outfile.dementia.control<-read.table(paste(inPath.dementia,'gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTVcal.filter.outfile.txt',sep = '/')) %>% dplyr::rename(.,c(GENE=V1,SNVS=V2))
+
+# process the gene names
+outfile.AD.case$GENE %<>% gsub("\\\\x3b.*","",.)
+outfile.AD.control$GENE %<>% gsub("\\\\x3b.*","",.)
+outfile.dementia.case$GENE %<>% gsub("\\\\x3b.*","",.)
+outfile.dementia.control$GENE %<>% gsub("\\\\x3b.*","",.)
+
+write.table(unique(c(outfile.AD.case$GENE,outfile.dementia.case$GENE)),paste(outPath,'list_case_AD_dementia_genes.txt',sep = '/'),quote = F,row.names = F,col.names = F) # for annotation in Metascape
+
+write.table(unique(outfile.AD.case$GENE),paste(outPath,'outfile_GENES.AD_case.txt',sep = '/'),quote = F,row.names = F,col.names = F)
+write.table(unique(outfile.AD.control$GENE),paste(outPath,'outfile_GENES.AD_control.txt',sep = '/'),quote = F,row.names = F,col.names = F)
+write.table(unique(outfile.dementia.case$GENE),paste(outPath,'outfile_GENES.dementia_case.txt',sep = '/'),quote = F,row.names = F,col.names = F)
+write.table(unique(outfile.dementia.control$GENE),paste(outPath,'outfile_GENES.dementia_control.txt',sep = '/'),quote = F,row.names = F,col.names = F)
+```
+
+## filter case-only mutated genes
+
+```{r}
+caseonly_AD<-lapply(unique(outfile.AD.case$GENE), function(x){if(!(x %in% unique(outfile.AD.control$GENE))){x}}) %>% unlist()
+caseonly_dementia<-lapply(unique(outfile.dementia.case$GENE), function(x){if(!(x %in% unique(outfile.dementia.control$GENE))){x}}) %>% unlist()
+```
+
+## output results
+
+```{r}
+case_AD_dementia.annotated<-read.xlsx(paste(outPath,'metascape_result.list_case_AD_dementia_genes.xlsx',sep = '/')) %>% dplyr::select(c(MyList,Gene.ID)) %>% dplyr::rename(.,c(GENE=MyList,ENTREZID=Gene.ID))
+
+caseonly_AD.ENTREZID<-case_AD_dementia.annotated %>% dplyr::filter(GENE %in% caseonly_AD)
+caseonly_dementia.ENTREZID<-case_AD_dementia.annotated %>% dplyr::filter(GENE %in% caseonly_dementia)
+caseonly_AD.ENTREZID$ENTREZID %<>% as.integer()
+caseonly_dementia.ENTREZID$ENTREZID %<>% as.integer()
+
+# combine with burdened genes
+
+burdengenes_dementia_list<-read.xlsx(paste(outPath,"list_burdengenes_AD_dementia.xlsx",sep = '/'),sheet = 'dementia') %>% dplyr::select(c(GENE,ENTREZID))
+burdengenes_AD_list<-read.xlsx(paste(outPath,"list_burdengenes_AD_dementia.xlsx",sep = '/'),sheet = 'AD') %>% dplyr::select(c(GENE,ENTREZID))
+
+all_burdened_caseonly<-list()
+
+all_burdened_caseonly$dementia.caseonly<-caseonly_dementia.ENTREZID
+all_burdened_caseonly$AD.caseonly<-caseonly_AD.ENTREZID
+all_burdened_caseonly$all.caseonly<-merge(all_burdened_caseonly$dementia.caseonly,all_burdened_caseonly$AD.caseonly,by=c('GENE','ENTREZID'),all=TRUE)
+
+all_burdened_caseonly$dementia.caseonly_an_burdened<-merge(caseonly_dementia.ENTREZID,burdengenes_dementia_list,by=c('GENE','ENTREZID'),all=TRUE)
+all_burdened_caseonly$AD.caseonly_an_burdened<-merge(caseonly_AD.ENTREZID,burdengenes_AD_list,by=c('GENE','ENTREZID'),all=TRUE)
+all_burdened_caseonly$dementia.caseonly_an_burdened$ENTREZID %<>% as.integer()
+all_burdened_caseonly$AD.caseonly_an_burdened$ENTREZID %<>% as.integer()
+all_burdened_caseonly$all.caseonly_an_burdened<-merge(all_burdened_caseonly$AD.caseonly_an_burdened,all_burdened_caseonly$dementia.caseonly_an_burdened,by=c('GENE','ENTREZID'),all=TRUE)
+
+write.xlsx(all_burdened_caseonly,paste(outPath,'list_TRAPD_caseonly_mutatedgenes_an_burdengenes.xlsx',sep = '/'))
+
+# output all caseonly-mutated and burdened genes (AD & dementia)
+
+write.table(all_burdened_caseonly$all.caseonly_an_burdened$ENTREZID,paste(outPath,'list_TRAPD_caseonly_mutatedgenes_an_burdengenes.txt',sep = '/'),quote = F,row.names = F,col.names = F)
+```
+
+## save image
+
+```{r}
+save(all_burdened_caseonly,burdengenes_AD_list,burdengenes_dementia_list,file = "R02_significant_burdened_and_caseonly_mutated.genesets.RData")
+rm(case_AD_dementia.annotated,caseonly_AD,caseonly_dementia,outfile.AD.control,outfile.dementia.control,outfile.AD.case,outfile.dementia.case)
+
+save.image('R02_caseonly_mutated_gene_extraction.RData')
+```
