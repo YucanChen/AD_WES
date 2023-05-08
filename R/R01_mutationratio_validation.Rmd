@@ -1,0 +1,165 @@
+---
+title: "mutationratio validation"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+
+# set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+library(tibble)
+#library(colorfindr)
+#library(RColorBrewer)
+#library(stringr)
+
+source("function.mutationratio_validation.R")
+inPath <- "/AD_exome/CYC_recall_batch2/WES_analysis_3rdadjust/mutationratio_validation"
+outPath <- "/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/mutationratio_validation/results"
+```
+
+
+# load data of per gene variant counts
+
+## AD
+
+```{r}
+# <PAV variants>
+
+#merged_PAV_count_vcf.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.PAV_D_deXY_inmaf.merge.count.vcf",sep = '/'),header = T)
+merged_PAV_count.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.PAV_D_deXY_inmaf.merge.count.txt",sep = '/'),header = T)
+#PAV_indel_count_vcf.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.indel.PAV_deXY_inmaf.count.vcf",sep = '/'),header = T)
+PAV_indel_count.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.indel.PAV_deXY_inmaf.count.txt",sep = '/'),header = T)
+#PAV_snp_count_vcf.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.snp.PAV_D_deXY_inmaf.count.vcf",sep = '/'),header = T)
+PAV_snp_count.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.snp.PAV_D_deXY_inmaf.count.txt",sep = '/'),header = T)
+
+# <Syn variants>
+
+#merged_Syn_count_vcf.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.Syn_deXY_inmaf.merge.count.vcf",sep = '/'),header = T)
+merged_Syn_count.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.Syn_deXY_inmaf.merge.count.txt",sep = '/'),header = T)
+#Syn_indel_count_vcf.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.indel.Syn_deXY_inmaf.count.vcf",sep = '/'),header = T)
+Syn_indel_count.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.indel.Syn_deXY_inmaf.count.txt",sep = '/'),header = T)
+#Syn_snp_count_vcf.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.snp.Syn_deXY_inmaf.count.vcf",sep = '/'),header = T)
+Syn_snp_count.AD <- read.table(paste(inPath,"AD_mutations/WES_highquality_hg38_sorted_AD.snp.Syn_deXY_inmaf.count.txt",sep = '/'),header = T)
+```
+
+## dementia
+
+```{r}
+# <PAV variants>
+
+#merged_PAV_count_vcf.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.PAV_D_deXY_inmaf.merge.count.vcf",sep = '/'),header = T)
+merged_PAV_count.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.PAV_D_deXY_inmaf.merge.count.txt",sep = '/'),header = T)
+#PAV_indel_count_vcf.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.indel.PAV_deXY_inmaf.count.vcf",sep = '/'),header = T)
+PAV_indel_count.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.indel.PAV_deXY_inmaf.count.txt",sep = '/'),header = T)
+#PAV_snp_count_vcf.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.snp.PAV_D_deXY_inmaf.count.vcf",sep = '/'),header = T)
+PAV_snp_count.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.snp.PAV_D_deXY_inmaf.count.txt",sep = '/'),header = T)
+
+# <Syn variants>
+
+#merged_Syn_count_vcf.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.Syn_deXY_inmaf.merge.count.vcf",sep = '/'),header = T)
+merged_Syn_count.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.Syn_deXY_inmaf.merge.count.txt",sep = '/'),header = T)
+#Syn_indel_count_vcf.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.indel.Syn_deXY_inmaf.count.vcf",sep = '/'),header = T)
+Syn_indel_count.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.indel.Syn_deXY_inmaf.count.txt",sep = '/'),header = T)
+#Syn_snp_count_vcf.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.snp.Syn_deXY_inmaf.count.vcf",sep = '/'),header = T)
+Syn_snp_count.dementia <- read.table(paste(inPath,"dementia_mutations/WES_highquality_hg38_sorted.snp.Syn_deXY_inmaf.count.txt",sep = '/'),header = T)
+```
+
+## Control
+
+```{r}
+# <PAV variants>
+
+#merged_PAV_count_vcf.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTVcal.rare.merge.pass.count.vcf",sep = '/'),header = T)
+merged_PAV_count.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTVcal.rare.merge.pass.count.txt",sep = '/'),header = T)
+#PAV_snp_count_vcf.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.snp.rare.pass.count.vcf",sep = '/'),header = T)
+PAV_snp_count.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.snp.rare.pass.count.txt",sep = '/'),header = T)
+#PAV_indel_count_vcf.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTV_indel2.rare.pass.count.vcf",sep = '/'),header = T)
+PAV_indel_count.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTV_indel2.rare.pass.count.txt",sep = '/'),header = T)
+
+# <Syn variants>
+
+#merged_Syn_count_vcf.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean2.Syn.rare.merge.pass.count.vcf",sep = '/'),header = T)
+merged_Syn_count.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean2.Syn.rare.merge.pass.count.txt",sep = '/'),header = T)
+#Syn_snp_count_vcf.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean2.snp.Syn.rare.pass.count.vcf",sep = '/'),header = T)
+Syn_snp_count.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean2.snp.Syn.rare.pass.count.txt",sep = '/'),header = T)
+#Syn_indel_count_vcf.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean2.indel.Syn.rare.pass.count.vcf",sep = '/'),header = T)
+Syn_indel_count.gnomad <- read.table(paste(inPath,"control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean2.indel.Syn.rare.pass.count.txt",sep = '/'),header = T)
+```
+
+# case data deduplicated SYMBOL
+
+```{r}
+# <PAV variants>
+
+merged_PAV_count.AD %<>% deduplicate_SYMBOL(count_txt = .)
+PAV_snp_count.AD %<>% deduplicate_SYMBOL(count_txt = .)
+PAV_indel_count.AD %<>% deduplicate_SYMBOL(count_txt = .)
+merged_PAV_count.dementia %<>% deduplicate_SYMBOL(count_txt = .)
+PAV_snp_count.dementia %<>% deduplicate_SYMBOL(count_txt = .)
+PAV_indel_count.dementia %<>% deduplicate_SYMBOL(count_txt = .)
+
+# <Syn variants>
+
+merged_Syn_count.AD %<>% deduplicate_SYMBOL(count_txt = .)
+Syn_snp_count.AD %<>% deduplicate_SYMBOL(count_txt = .)
+Syn_indel_count.AD %<>% deduplicate_SYMBOL(count_txt = .)
+merged_Syn_count.dementia %<>% deduplicate_SYMBOL(count_txt = .)
+Syn_snp_count.dementia %<>% deduplicate_SYMBOL(count_txt = .)
+Syn_indel_count.dementia %<>% deduplicate_SYMBOL(count_txt = .)
+```
+
+# control data deduplicated SYMBOL
+
+```{r}
+# <PAV variants>
+
+merged_PAV_count.gnomad %<>% deduplicate_SYMBOL(count_txt = .)
+PAV_snp_count.gnomad %<>% deduplicate_SYMBOL(count_txt = .)
+PAV_indel_count.gnomad %<>% deduplicate_SYMBOL(count_txt = .)
+
+# <Syn variants>
+
+merged_Syn_count.gnomad %<>% deduplicate_SYMBOL(count_txt = .)
+Syn_snp_count.gnomad %<>% deduplicate_SYMBOL(count_txt = .)
+Syn_indel_count.gnomad %<>% deduplicate_SYMBOL(count_txt = .)
+```
+
+
+# mutation ratio validation
+
+## AD vs. Control
+
+```{r,message=FALSE, warning=FALSE}
+### merged
+
+mutationratio_test(out_folder=paste(outPath,'AD',sep = '/'),PAV_count.case = merged_PAV_count.AD,PAV_count.control = merged_PAV_count.gnomad,Syn_count.case = merged_Syn_count.AD,Syn_count.control = merged_Syn_count.gnomad,count_adjust_method = c('sum','genes'),correction_method = 'bonferroni',merge_method = c('all genes','co-occured genes'),padjust.threshold = 0.001)
+
+### SNP
+
+mutationratio_test(out_folder=paste(outPath,'AD_SNP',sep = '/'),PAV_count.case = PAV_snp_count.AD,PAV_count.control = PAV_snp_count.gnomad,Syn_count.case = Syn_snp_count.AD,Syn_count.control = Syn_snp_count.gnomad,count_adjust_method = c('sum','genes'),correction_method = 'bonferroni',merge_method = c('all genes','co-occured genes'),padjust.threshold = 0.001)
+```
+
+## dementia vs. Control
+
+```{r,message=FALSE, warning=FALSE}
+### merged
+
+mutationratio_test(out_folder=paste(outPath,'dementia',sep = '/'),PAV_count.case = merged_PAV_count.dementia,PAV_count.control = merged_PAV_count.gnomad,Syn_count.case = merged_Syn_count.dementia,Syn_count.control = merged_Syn_count.gnomad,count_adjust_method = c('sum','genes'),correction_method = 'bonferroni',merge_method = c('all genes','co-occured genes'),padjust.threshold = 0.001)
+
+### SNP
+
+mutationratio_test(out_folder=paste(outPath,'dementia_SNP',sep = '/'),PAV_count.case = PAV_snp_count.dementia,PAV_count.control = PAV_snp_count.gnomad,Syn_count.case = Syn_snp_count.dementia,Syn_count.control = Syn_snp_count.gnomad,count_adjust_method = c('sum','genes'),correction_method = 'bonferroni',merge_method = c('all genes','co-occured genes'),padjust.threshold = 0.001)
+```
+
+
+# save image
+
+```{r}
+save.image("R01_mutationratio_validation.RData")
+```
