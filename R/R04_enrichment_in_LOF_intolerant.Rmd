@@ -1,0 +1,170 @@
+---
+title: "enrichment in LOF intolerant"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+
+inPath<-'/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627'
+source('function.enrichment_in_LOF_intolerant.R')
+```
+
+## import pLI_data: pLI_B => all background; pLI_09 => pLI > 0.9
+
+```{r}
+pLI_B <- read.csv("/AD_exome/Downstream_analyses/20191208_gene_GeneticEvidence_MasterTable_foranalysis.csv")[,c(1:10,75,76)]
+pLI_B <- pLI_B[complete.cases(pLI_B[,"ExAC.all.pLI...0.9"]), ]
+pLI_09 <- pLI_B[which(pLI_B$ExAC.all.pLI...0.9==1),]
+```
+
+################################################################################
+#
+# Part 1: variant-level enrichment test (this part can be deleted)
+#
+################################################################################
+
+## Note: this part can be deleted (No change of script this time) !!!
+
+## import case-control data
+
+```{r}
+## load data <Variants from TRAPD outfiles>
+
+case_snps_AD <- read.csv("case_AD_outfile_snps.csv")
+control_snps_AD <- read.csv("control_AD_outfile_snps.csv")
+mapping_names_AD <- read.csv("/AD_exome/Downstream_analyses/AD_downstream_scripts/burdenresult_AD_annotatedforLR.csv")[,1:5]
+
+case_snps_dementia <- read.csv("case_dementia_outfile_snps.csv")
+control_snps_dementia <- read.csv("control_dementia_outfile_snps.csv")
+mapping_names_dementia <- read.csv("/AD_exome/Downstream_analyses/AD_downstream_scripts/burdenresult_dementia_annotatedforLR.csv")[,1:5]
+```
+
+## process the data && enrichment test: AD case variants vs genomAD control variants
+
+```{r}
+
+## AD
+
+case_snps_AD_B <- case_snps_AD[which(case_snps_AD$GENE %in% pLI_B$Symbol),]
+case_snps_AD_B$GeneID <- unlist(lapply(case_snps_AD_B$GENE,function(x){pLI_B[which(pLI_B$Symbol==x),"X.GeneID"]}))
+case_snps_AD_09 <- case_snps_AD_B[which(case_snps_AD_B$GENE %in% pLI_09$Symbol),]
+
+control_snps_AD_B <- control_snps_AD[which(control_snps_AD$GENE %in% pLI_B$Symbol),]
+control_snps_AD_09 <- control_snps_AD_B[which(control_snps_AD_B$GENE %in% pLI_09$Symbol),]
+
+test.set <- c(length(case_snps_AD_09$SNPS),length(control_snps_AD_09$SNPS),length(case_snps_AD_B$SNPS)-length(case_snps_AD_09$SNPS),length(control_snps_AD_B$SNPS)-length(control_snps_AD_09$SNPS))
+
+test.dataframe <- matrix(test.set,nrow = 2,dimnames = list(c("case","control"),c("intolerant","tolerant")))
+test.fisher_result <- fisher.test(test.dataframe, alternative = "greater")
+test.fisher_result
+test.fisher_result <- chisq.test(test.dataframe)
+test.fisher_result
+
+## dementia
+
+case_snps_dementia_B <- case_snps_dementia[which(case_snps_dementia$GENE %in% pLI_B$Symbol),]
+case_snps_dementia_B$GeneID <- unlist(lapply(case_snps_dementia_B$GENE,function(x){pLI_B[which(pLI_B$Symbol==x),"X.GeneID"]}))
+case_snps_dementia_09 <- case_snps_dementia_B[which(case_snps_dementia_B$GENE %in% pLI_09$Symbol),]
+
+control_snps_dementia_B <- control_snps_dementia[which(control_snps_dementia$GENE %in% pLI_B$Symbol),]
+control_snps_dementia_09 <- control_snps_dementia_B[which(control_snps_dementia_B$GENE %in% pLI_09$Symbol),]
+
+test.set <- c(length(case_snps_dementia_09$SNPS),length(control_snps_dementia_09$SNPS),length(case_snps_dementia_B$SNPS)-length(case_snps_dementia_09$SNPS),length(control_snps_dementia_B$SNPS)-length(control_snps_dementia_09$SNPS))
+
+test.dataframe <- matrix(test.set,nrow = 2,dimnames = list(c("case","control"),c("intolerant","tolerant")))
+test.fisher_result <- fisher.test(test.dataframe, alternative = "greater")
+test.fisher_result
+```
+
+
+################################################################################
+#
+# Part 2: gene-level enrichment test
+#
+################################################################################
+
+### No significant results from case-control analysis, sig result can be seen from case only mutated genes
+
+# Part2: <Burden gene sets from TRAPD burden testing & Case-only mutated gene sets from TRAPD outfiles (case vs. control)>
+# Part3: <Enrichment of case only mutated genes in intolerant gene list>
+
+## import all burdened and case-only mutated genes
+
+```{r}
+## load data <Burden genesets from TRAPD burden testing>
+
+load("R02_significant_burdened_and_caseonly_mutated.genesets.RData")
+
+## enrichment test of case-only mutated genes and burdened genes in intolerant gene list
+
+result_case_only_all<-geneset_LOF_intolerant_testing(all_burdened_caseonly$all.caseonly$ENTREZID,pLI_09 = pLI_09,pLI_B = pLI_B)
+result_case_only_dementia<-geneset_LOF_intolerant_testing(all_burdened_caseonly$dementia.caseonly$ENTREZID,pLI_09 = pLI_09,pLI_B = pLI_B)
+result_case_only_AD<-geneset_LOF_intolerant_testing(all_burdened_caseonly$AD.caseonly$ENTREZID,pLI_09 = pLI_09,pLI_B = pLI_B)
+
+result_burden_all<-geneset_LOF_intolerant_testing(unique(c(burdengenes_dementia_list$ENTREZID,burdengenes_AD_list$ENTREZID)),pLI_09 = pLI_09,pLI_B = pLI_B)
+result_burden_dementia<-geneset_LOF_intolerant_testing(burdengenes_dementia_list$ENTREZID,pLI_09 = pLI_09,pLI_B = pLI_B)
+result_burden_AD<-geneset_LOF_intolerant_testing(burdengenes_AD_list$ENTREZID,pLI_09 = pLI_09,pLI_B = pLI_B)
+
+result_caseonlyandburden_all<-geneset_LOF_intolerant_testing(unique(all_burdened_caseonly$all.caseonly_an_burdened$ENTREZID),pLI_09 = pLI_09,pLI_B = pLI_B)
+result_caseonlyandburden_dementia<-geneset_LOF_intolerant_testing(unique(all_burdened_caseonly$dementia.caseonly_an_burdened$ENTREZID),pLI_09 = pLI_09,pLI_B = pLI_B)
+result_caseonlyandburden_AD<-geneset_LOF_intolerant_testing(unique(all_burdened_caseonly$AD.caseonly_an_burdened$ENTREZID),pLI_09 = pLI_09,pLI_B = pLI_B)
+```
+
+## check results
+
+```{r}
+print('result_case_only_all')
+result_case_only_all
+
+print('result_case_only_dementia')
+result_case_only_dementia
+
+print('result_case_only_AD')
+result_case_only_AD
+
+print('result_burden_all')
+result_burden_all
+
+print('result_burden_dementia')
+result_burden_dementia
+
+print('result_burden_AD')
+result_burden_AD
+
+print('result_caseonlyandburden_all')
+result_caseonlyandburden_all
+
+print('result_caseonlyandburden_dementia')
+result_caseonlyandburden_dementia
+
+print('result_caseonlyandburden_AD')
+result_caseonlyandburden_AD
+```
+
+
+## add evidence to the ranking list
+
+```{r}
+# the previous script in "burdened genes PPI partner extraction"
+
+evidence_df<-read.xlsx("evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+evidence_df$pLI09_LOF_intolerant<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% pLI_09$X.GeneID){1}else{0}}) %>% unlist
+write.xlsx(evidence_df,"evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "pathwaybased_enrichment_plots"
+```
+
+
+## save image
+
+```{r}
+save.image("R04_enrichment_in_LOF_intolerant.RData")
+```
