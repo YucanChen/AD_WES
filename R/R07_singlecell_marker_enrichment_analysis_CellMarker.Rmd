@@ -1,0 +1,555 @@
+---
+title: "single-cell enrichment analysis and figure drawing"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(biomaRt)
+library(lattice)
+library(gplots)
+library(RColorBrewer)
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(tidyverse))
+library(tibble)
+
+source("function.singlecell_marker_enrichment_analysis_CellMarker.R")
+outPath <- "/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/Single-cell_transcriptome"
+```
+
+################################################################################
+#
+# Background table preparation
+#
+################################################################################
+
+## load annotated mutation table
+
+```{r, message=FALSE, warning=FALSE}
+inPath.mut<-'/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/burden_test'
+burdenresult_dementia<-read.xlsx(paste(inPath.mut,'burdengenes_result_extraction.annotated.length_gc.xlsx',sep = '/'),sheet = 'dementia')
+burdenresult_AD<-read.xlsx(paste(inPath.mut,'burdengenes_result_extraction.annotated.length_gc.xlsx',sep = '/'),sheet = 'AD')
+```
+
+## testing geneset preparation
+
+```{r}
+# testing gene sets
+
+load('R02_significant_burdened_and_caseonly_mutated.genesets.RData')
+load('R03_burdengenes_PPIpartner_extraction.genesets.RData')
+load('outfile_GENES.case.AD_dementia.genesets.RData')
+
+# dementia_PPI_cluster
+# AD_PPI_cluster
+
+list_burden_dementia<-burdengenes_dementia_list$ENTREZID
+list_burden_AD<-burdengenes_AD_list$ENTREZID
+
+list_caseonly_dementia<-all_burdened_caseonly$dementia.caseonly$ENTREZID
+list_caseonly_AD<-all_burdened_caseonly$AD.caseonly$ENTREZID
+list_caseonly_and_burden_all<-all_burdened_caseonly$all.caseonly_an_burdened$ENTREZID
+
+list_case_dementia %<>% dplyr::pull(ENTREZID)
+list_case_AD %<>% dplyr::pull(ENTREZID)
+```
+
+################################################################################
+#
+# Cell type enrichment analysis with markers from CellMarker database
+#
+################################################################################
+
+## cell type marker loading and background gene annotation
+
+```{r, message=FALSE, warning=FALSE}
+inPath.celltype_markers<-'/AD_exome/Downstream_analyses/AD_downstream_scripts/Single-cell_transcriptome/celltype_markers/Source_CellMarker'
+
+celltype_markers.CellMarker<-read.table(paste(inPath.celltype_markers,'Human_cell_markers.txt',sep = '/'),sep = '\t',header = T)
+celltype_markers.CellMarker_set<-read.table(paste(inPath.celltype_markers,'Single_cell_markers.txt',sep = '/'),sep = '\t',header = T)
+```
+
+# Section 1: filter human and normal samples from the marker list
+
+## Prepare data
+
+```{r, message=FALSE, warning=FALSE}
+celltype_markers.CellMarker.hgnormal<-get_CellMarker_celltypefilter(celltype_markers.CellMarker,filtertype = c("speciesType","cancerType"),filter_value = c("Human","Normal"))
+celltype_markers.CellMarker_set.hgnormal<-get_CellMarker_celltypefilter(celltype_markers.CellMarker_set,filtertype = c("speciesType","cancerType"),filter_value = c("Human","Normal"))
+
+# cell type annotation
+
+celltype_markers.CellMarker.hgnormal.anno_dementia<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker.hgnormal,background_genes = burdenresult_dementia)
+celltype_markers.CellMarker.hgnormal.anno_AD<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker.hgnormal,background_genes = burdenresult_AD)
+
+celltype_markers.CellMarker_set.hgnormal.anno_dementia<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker_set.hgnormal,background_genes = burdenresult_dementia)
+celltype_markers.CellMarker_set.hgnormal.anno_AD<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker_set.hgnormal,background_genes = burdenresult_AD)
+```
+
+### cell-type Enrichment test from celltype_markers.CellMarker.hgnormal
+
+```{r, message=FALSE, warning=FALSE}
+CellMarker_enrich_res.burdendementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_dementia,disease_genes = list_burden_dementia)
+CellMarker_enrich_res.burdenAD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_AD,disease_genes = list_burden_AD)
+
+CellMarker_enrich_res.caseonly_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_dementia,disease_genes = list_caseonly_dementia)
+CellMarker_enrich_res.caseonly_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_AD,disease_genes = list_caseonly_AD)
+
+CellMarker_enrich_res.case_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_dementia,disease_genes = list_case_dementia)
+CellMarker_enrich_res.case_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_AD,disease_genes = list_case_AD)
+
+CellMarker_enrich_res.PPI_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_dementia,disease_genes = dementia_PPI_cluster)
+CellMarker_enrich_res.PPI_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal.anno_AD,disease_genes = AD_PPI_cluster)
+```
+
+### cell-type Enrichment test from celltype_markers.CellMarker_set.hgnormal
+
+```{r, message=FALSE, warning=FALSE}
+CellMarker_enrich_set_res.burdendementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_dementia,disease_genes = list_burden_dementia)
+CellMarker_enrich_set_res.burdenAD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_AD,disease_genes = list_burden_AD)
+
+CellMarker_enrich_set_res.caseonly_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_dementia,disease_genes = list_caseonly_dementia)
+CellMarker_enrich_set_res.caseonly_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_AD,disease_genes = list_caseonly_AD)
+
+
+CellMarker_enrich_set_res.case_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_dementia,disease_genes = list_case_dementia)
+CellMarker_enrich_set_res.case_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_AD,disease_genes = list_case_AD)
+
+CellMarker_enrich_set_res.PPI_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_dementia,disease_genes = dementia_PPI_cluster)
+CellMarker_enrich_set_res.PPI_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal.anno_AD,disease_genes = AD_PPI_cluster)
+```
+
+# Section 2: filter human and normal brain samples from the marker list
+
+```{r, message=FALSE, warning=FALSE}
+celltype_markers.CellMarker.hgnormal_brain<-get_CellMarker_celltypefilter(celltype_markers.CellMarker,filtertype = c("speciesType","tissueType","cancerType"),filter_value = c("Human","Brain","Normal"))
+celltype_markers.CellMarker_set.hgnormal_brain<-get_CellMarker_celltypefilter(celltype_markers.CellMarker_set,filtertype = c("speciesType","tissueType","cancerType"),filter_value = c("Human","Brain","Normal"))
+
+# cell type annnotation
+
+celltype_markers.CellMarker.hgnormal_brain.anno_dementia<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker.hgnormal_brain,background_genes = burdenresult_dementia)
+celltype_markers.CellMarker.hgnormal_brain.anno_AD<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker.hgnormal_brain,background_genes = burdenresult_AD)
+
+celltype_markers.CellMarker_set.hgnormal_brain.anno_dementia<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker_set.hgnormal_brain,background_genes = burdenresult_dementia)
+celltype_markers.CellMarker_set.hgnormal_brain.anno_AD<-get_CellMarker_annotation_prepare(celltype_markers.CellMarker_set.hgnormal_brain,background_genes = burdenresult_AD)
+```
+
+## get celltypeEnrichment from celltype_markers.CellMarker.hgnormal_brain
+
+```{r, message=FALSE, warning=FALSE}
+CellMarker_enrich_brain_res.burdendementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_dementia,disease_genes = list_burden_dementia)
+CellMarker_enrich_brain_res.burdenAD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_AD,disease_genes = list_burden_AD)
+
+CellMarker_enrich_brain_res.caseonly_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_dementia,disease_genes = list_caseonly_dementia)
+CellMarker_enrich_brain_res.caseonly_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_AD,disease_genes = list_caseonly_AD)
+
+CellMarker_enrich_brain_res.case_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_dementia,disease_genes = list_case_dementia)
+CellMarker_enrich_brain_res.case_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_AD,disease_genes = list_case_AD)
+
+CellMarker_enrich_brain_res.PPI_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_dementia,disease_genes = dementia_PPI_cluster)
+CellMarker_enrich_brain_res.PPI_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker.hgnormal_brain.anno_AD,disease_genes = AD_PPI_cluster)
+```
+
+## get celltypeEnrichment from celltype_markers.CellMarker_set.hgnormal_brain
+
+```{r, message=FALSE, warning=FALSE}
+CellMarker_enrich_brain_set_res.burdendementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_dementia,disease_genes = list_burden_dementia)
+CellMarker_enrich_brain_set_res.burdenAD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_AD,disease_genes = list_burden_AD)
+
+CellMarker_enrich_brain_set_res.caseonly_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_dementia,disease_genes = list_caseonly_dementia)
+CellMarker_enrich_brain_set_res.caseonly_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_AD,disease_genes = list_caseonly_AD)
+
+CellMarker_enrich_brain_set_res.case_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_dementia,disease_genes = list_case_dementia)
+CellMarker_enrich_brain_set_res.case_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_AD,disease_genes = list_case_AD)
+
+CellMarker_enrich_brain_set_res.PPI_dementia<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_dementia,disease_genes = dementia_PPI_cluster)
+CellMarker_enrich_brain_set_res.PPI_AD<-get_CellMarker_celltypeEnrichment(celltype_markers.CellMarker_set.hgnormal_brain.anno_AD,disease_genes = AD_PPI_cluster)
+```
+
+# Section 3: filter significant results
+
+### Brain tissues
+
+```{r, message=FALSE, warning=FALSE}
+
+# brain
+
+sig_CellMarker.brain.burdendementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.burdendementia,p_adjust_value = 0.1)
+sig_CellMarker.brain.burdenAD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.burdenAD,p_adjust_value = 0.1)
+
+sig_CellMarker.brain.caseonly_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.caseonly_dementia,p_adjust_value = 0.1)
+sig_CellMarker.brain.caseonly_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.caseonly_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.brain.case_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.case_dementia,p_adjust_value = 0.1)
+sig_CellMarker.brain.case_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.case_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.brain.PPI_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.PPI_dementia,p_adjust_value = 0.1)
+sig_CellMarker.brain.PPI_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_res.PPI_AD,p_adjust_value = 0.1)
+
+# brain_set
+
+sig_CellMarker.brain_set.burdendementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.burdendementia,p_adjust_value = 0.1)
+sig_CellMarker.brain_set.burdenAD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.burdenAD,p_adjust_value = 0.1)
+
+sig_CellMarker.brain_set.caseonly_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.caseonly_dementia,p_adjust_value = 0.1)
+sig_CellMarker.brain_set.caseonly_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.caseonly_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.brain_set.case_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.case_dementia,p_adjust_value = 0.1)
+sig_CellMarker.brain_set.case_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.case_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.brain_set.PPI_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.PPI_dementia,p_adjust_value = 0.1)
+sig_CellMarker.brain_set.PPI_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_brain_set_res.PPI_AD,p_adjust_value = 0.1)
+```
+
+### All tissues
+
+```{r message=FALSE, warning=FALSE}
+
+# all
+
+sig_CellMarker.all.burdendementia<-get_CellMarker_enrichfilter(CellMarker_enrich_res.burdendementia,p_adjust_value = 0.1)
+sig_CellMarker.all.burdenAD<-get_CellMarker_enrichfilter(CellMarker_enrich_res.burdenAD,p_adjust_value = 0.1)
+
+sig_CellMarker.all.caseonly_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_res.caseonly_dementia,p_adjust_value = 0.1)
+sig_CellMarker.all.caseonly_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_res.caseonly_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.all.case_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_res.case_dementia,p_adjust_value = 0.1)
+sig_CellMarker.all.case_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_res.case_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.all.PPI_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_res.PPI_dementia,p_adjust_value = 0.1)
+sig_CellMarker.all.PPI_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_res.PPI_AD,p_adjust_value = 0.1)
+
+# all_set
+
+sig_CellMarker.all_set.burdendementia<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.burdendementia,p_adjust_value = 0.1)
+sig_CellMarker.all_set.burdenAD<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.burdenAD,p_adjust_value = 0.1)
+
+sig_CellMarker.all_set.caseonly_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.caseonly_dementia,p_adjust_value = 0.1)
+sig_CellMarker.all_set.caseonly_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.caseonly_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.all_set.case_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.case_dementia,p_adjust_value = 0.1)
+sig_CellMarker.all_set.case_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.case_AD,p_adjust_value = 0.1)
+
+sig_CellMarker.all_set.PPI_dementia<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.PPI_dementia,p_adjust_value = 0.1)
+sig_CellMarker.all_set.PPI_AD<-get_CellMarker_enrichfilter(CellMarker_enrich_set_res.PPI_AD,p_adjust_value = 0.1)
+```
+
+## save significant enrichment results
+
+```{r}
+
+# brain res
+
+xl_list_brain<-list()
+
+xl_list_brain$sig_burden_dementia<-sig_CellMarker.brain.burdendementia
+xl_list_brain$sig_burden_AD<-sig_CellMarker.brain.burdenAD
+
+xl_list_brain$sig_caseonly_dementia<-sig_CellMarker.brain.caseonly_dementia
+xl_list_brain$sig_caseonly_AD<-sig_CellMarker.brain.caseonly_AD
+
+xl_list_brain$sig_case_dementia<-sig_CellMarker.brain.case_dementia
+xl_list_brain$sig_case_AD<-sig_CellMarker.brain.case_AD
+
+xl_list_brain$sig_PPI_dementia<-sig_CellMarker.brain.PPI_dementia
+xl_list_brain$sig_PPI_AD<-sig_CellMarker.brain.PPI_AD
+
+# brain_set res
+
+xl_list_brain_set<-list()
+
+xl_list_brain_set$sig_burden_dementia<-sig_CellMarker.brain_set.burdendementia
+xl_list_brain_set$sig_burden_AD<-sig_CellMarker.brain_set.burdenAD
+
+xl_list_brain_set$sig_caseonly_dementia<-sig_CellMarker.brain_set.caseonly_dementia
+xl_list_brain_set$sig_caseonly_AD<-sig_CellMarker.brain_set.caseonly_AD
+
+xl_list_brain_set$sig_case_dementia<-sig_CellMarker.brain_set.case_dementia
+xl_list_brain_set$sig_case_AD<-sig_CellMarker.brain_set.case_AD
+
+xl_list_brain_set$sig_PPI_dementia<-sig_CellMarker.brain_set.PPI_dementia
+xl_list_brain_set$sig_PPI_AD<-sig_CellMarker.brain_set.PPI_AD
+
+# all res
+
+xl_list_all<-list()
+
+xl_list_all$sig_burden_dementia<-sig_CellMarker.all.burdendementia
+xl_list_all$sig_burden_AD<-sig_CellMarker.all.burdenAD
+
+xl_list_all$sig_caseonly_dementia<-sig_CellMarker.all.caseonly_dementia
+xl_list_all$sig_caseonly_AD<-sig_CellMarker.all.caseonly_AD
+
+xl_list_all$sig_case_dementia<-sig_CellMarker.all.case_dementia
+xl_list_all$sig_case_AD<-sig_CellMarker.all.case_AD
+
+xl_list_all$sig_PPI_dementia<-sig_CellMarker.all.PPI_dementia
+xl_list_all$sig_PPI_AD<-sig_CellMarker.all.PPI_AD
+
+# all_set res
+
+xl_list_all_set<-list()
+
+xl_list_all_set$sig_burden_dementia<-sig_CellMarker.all_set.burdendementia
+xl_list_all_set$sig_burden_AD<-sig_CellMarker.all_set.burdenAD
+
+xl_list_all_set$sig_caseonly_dementia<-sig_CellMarker.all_set.caseonly_dementia
+xl_list_all_set$sig_caseonly_AD<-sig_CellMarker.all_set.caseonly_AD
+
+xl_list_all_set$sig_case_dementia<-sig_CellMarker.all_set.case_dementia
+xl_list_all_set$sig_case_AD<-sig_CellMarker.all_set.case_AD
+
+xl_list_all_set$sig_PPI_dementia<-sig_CellMarker.all_set.PPI_dementia
+xl_list_all_set$sig_PPI_AD<-sig_CellMarker.all_set.PPI_AD
+
+## output result tables
+
+write.xlsx(xl_list_brain,paste(outPath,"CellMarker_enrich_sig_brain.xlsx",sep = '/'))
+write.xlsx(xl_list_brain_set,paste(outPath,"CellMarker_enrich_sig_brain_set.xlsx",sep = '/'))
+write.xlsx(xl_list_all,paste(outPath,"CellMarker_enrich_sig_all.xlsx",sep = '/'))
+write.xlsx(xl_list_all_set,paste(outPath,"CellMarker_enrich_sig_all_set.xlsx",sep = '/'))
+```
+
+################################################################################
+#
+# plot drawing
+#
+################################################################################
+
+# prepare data for visualization
+
+## collect all the significant cell types
+
+```{r}
+
+# brain
+
+ls.sig_CellMarker.brain<-unique(c(sig_CellMarker.brain.case_AD$cell_type,sig_CellMarker.brain.PPI_dementia$cell_type,sig_CellMarker.brain.PPI_AD$cell_type)) %>% sort
+
+# brain_set
+
+ls.sig_CellMarker.brain_set<-unique(c(sig_CellMarker.brain_set.case_AD$cell_type)) %>% sort
+
+# all
+
+ls.sig_CellMarker.all<-unique(c(sig_CellMarker.all.burdendementia$cell_type,sig_CellMarker.all.burdenAD$cell_type,sig_CellMarker.all.caseonly_dementia$cell_type,sig_CellMarker.all.caseonly_AD$cell_type,sig_CellMarker.all.case_dementia$cell_type,sig_CellMarker.all.case_AD$cell_type,sig_CellMarker.all.PPI_dementia$cell_type,sig_CellMarker.all.PPI_AD$cell_type)) %>% sort
+
+# all_set
+
+ls.sig_CellMarker.all_set<-unique(c(sig_CellMarker.all_set.burdendementia$cell_type,sig_CellMarker.all_set.burdenAD$cell_type,sig_CellMarker.all_set.caseonly_dementia$cell_type,sig_CellMarker.all_set.caseonly_AD$cell_type,sig_CellMarker.all_set.case_dementia$cell_type,sig_CellMarker.all_set.case_AD$cell_type,sig_CellMarker.all_set.PPI_dementia$cell_type,sig_CellMarker.all_set.PPI_AD$cell_type)) %>% sort
+```
+
+## add group and combine
+
+### all
+
+```{r message=FALSE, warning=FALSE}
+plt.burdendementia<-CellMarker_enrich_res.burdendementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("burdened dementia",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+plt.burdenAD<-CellMarker_enrich_res.burdenAD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("burdened AD",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+
+plt.caseonly_dementia<-CellMarker_enrich_res.caseonly_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("case-only dementia",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+plt.caseonly_AD<-CellMarker_enrich_res.caseonly_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("case-only AD",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+
+plt.case_dementia<-CellMarker_enrich_res.case_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("case dementia",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+plt.case_AD<-CellMarker_enrich_res.case_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("case AD",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+
+plt.PPI_dementia<-CellMarker_enrich_res.PPI_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("PPI dementia",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+plt.PPI_AD<-CellMarker_enrich_res.PPI_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all) %>% cbind(.,group=rep("PPI AD",length(ls.sig_CellMarker.all))) %>% arrange(cell_type)
+
+# res enrich plt combine
+
+plt.all<-rbind(plt.burdendementia,plt.burdenAD,plt.caseonly_dementia,plt.caseonly_AD,plt.case_dementia,plt.case_AD,plt.PPI_dementia,plt.PPI_AD)
+```
+
+### all_set
+
+```{r message=FALSE, warning=FALSE}
+plt.burdendementia<-CellMarker_enrich_set_res.burdendementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("burdened dementia",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+plt.burdenAD<-CellMarker_enrich_set_res.burdenAD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("burdened AD",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+
+plt.caseonly_dementia<-CellMarker_enrich_set_res.caseonly_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("case-only dementia",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+plt.caseonly_AD<-CellMarker_enrich_set_res.caseonly_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("case-only AD",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+
+plt.case_dementia<-CellMarker_enrich_set_res.case_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("case dementia",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+plt.case_AD<-CellMarker_enrich_set_res.case_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("case AD",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+
+plt.PPI_dementia<-CellMarker_enrich_set_res.PPI_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("PPI dementia",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+plt.PPI_AD<-CellMarker_enrich_set_res.PPI_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.all_set) %>% cbind(.,group=rep("PPI AD",length(ls.sig_CellMarker.all_set))) %>% arrange(cell_type)
+
+# res enrich plt combine
+
+plt.all_set<-rbind(plt.burdendementia,plt.burdenAD,plt.caseonly_dementia,plt.caseonly_AD,plt.case_dementia,plt.case_AD,plt.PPI_dementia,plt.PPI_AD)
+```
+
+### brain
+
+```{r message=FALSE, warning=FALSE}
+plt.burdendementia<-CellMarker_enrich_brain_res.burdendementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("burdened dementia",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+plt.burdenAD<-CellMarker_enrich_brain_res.burdenAD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("burdened AD",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+
+plt.caseonly_dementia<-CellMarker_enrich_brain_res.caseonly_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("case-only dementia",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+plt.caseonly_AD<-CellMarker_enrich_brain_res.caseonly_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("case-only AD",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+
+plt.case_dementia<-CellMarker_enrich_brain_res.case_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("case dementia",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+plt.case_AD<-CellMarker_enrich_brain_res.case_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("case AD",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+
+plt.PPI_dementia<-CellMarker_enrich_brain_res.PPI_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("PPI dementia",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+plt.PPI_AD<-CellMarker_enrich_brain_res.PPI_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain) %>% cbind(.,group=rep("PPI AD",length(ls.sig_CellMarker.brain))) %>% arrange(cell_type)
+
+# res enrich plt combine
+
+plt.brain<-rbind(plt.burdendementia,plt.burdenAD,plt.caseonly_dementia,plt.caseonly_AD,plt.case_dementia,plt.case_AD,plt.PPI_dementia,plt.PPI_AD)
+```
+
+### brain_set
+
+```{r message=FALSE, warning=FALSE}
+plt.burdendementia<-CellMarker_enrich_brain_set_res.burdendementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("burdened dementia",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+plt.burdenAD<-CellMarker_enrich_brain_set_res.burdenAD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("burdened AD",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+
+plt.caseonly_dementia<-CellMarker_enrich_brain_set_res.caseonly_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("case-only dementia",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+plt.caseonly_AD<-CellMarker_enrich_brain_set_res.caseonly_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("case-only AD",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+
+plt.case_dementia<-CellMarker_enrich_brain_set_res.case_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("case dementia",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+plt.case_AD<-CellMarker_enrich_brain_set_res.case_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("case AD",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+
+plt.PPI_dementia<-CellMarker_enrich_brain_set_res.PPI_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("PPI dementia",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+plt.PPI_AD<-CellMarker_enrich_brain_set_res.PPI_AD %>% dplyr::filter(rownames(.) %in% ls.sig_CellMarker.brain_set) %>% cbind(.,group=rep("PPI AD",length(ls.sig_CellMarker.brain_set))) %>% arrange(cell_type)
+
+# res enrich plt combine
+
+plt.brain_set<-rbind(plt.burdendementia,plt.burdenAD,plt.caseonly_dementia,plt.caseonly_AD,plt.case_dementia,plt.case_AD,plt.PPI_dementia,plt.PPI_AD)
+```
+
+## output significant result tables
+
+```{r}
+xl_list_sigvisual<-list()
+
+xl_list_sigvisual$all<-plt.all
+xl_list_sigvisual$all_set<-plt.all_set
+xl_list_sigvisual$brain<-plt.brain
+xl_list_sigvisual$brain_set<-plt.brain_set
+
+write.xlsx(xl_list_sigvisual,paste(outPath,"CellMarker_sigvisual_table_allgroups.xlsx",sep = '/'))
+```
+
+
+# data visualization
+
+## plot drawing
+
+```{r, message=FALSE, warning=FALSE}
+heatmap.plt.all<-get_heatmatrix(celltype_enrich=plt.all,ls.sig_CellMarker=ls.sig_CellMarker.all,testing_set_name="all tissues")
+
+heatmap.plt.all_set<-get_heatmatrix(celltype_enrich=plt.all_set,ls.sig_CellMarker=ls.sig_CellMarker.all_set,testing_set_name="all tissues from set")
+
+heatmap.plt.brain<-get_heatmatrix(celltype_enrich=plt.brain,ls.sig_CellMarker=ls.sig_CellMarker.brain,testing_set_name="brain tissues")
+
+heatmap.plt.brain_set<-get_heatmatrix(celltype_enrich=plt.brain_set,ls.sig_CellMarker=ls.sig_CellMarker.brain_set,testing_set_name="brain tissues from set")
+```
+
+## output the plots
+
+```{r}
+# define trellis object saving function
+
+save_trellis <- function(heatmap_plot,ls.sig_CellMarker,file_name,save_path){
+ pdf(paste(save_path,file_name,sep = '/'),height=20,width=2+20*length(ls.sig_CellMarker)/12)
+ print(heatmap_plot)
+ dev.off()
+}
+
+# save plot
+save_trellis(heatmap.plt.all,ls.sig_CellMarker.all,"plot_single-cell_enrichment_CellMarker-all.pdf",outPath)
+save_trellis(heatmap.plt.all_set,ls.sig_CellMarker.all_set,"plot_single-cell_enrichment_CellMarker-all_set.pdf",outPath)
+save_trellis(heatmap.plt.brain,ls.sig_CellMarker.brain,"plot_single-cell_enrichment_CellMarker-brain.pdf",outPath)
+save_trellis(heatmap.plt.brain_set,ls.sig_CellMarker.brain_set,"plot_single-cell_enrichment_CellMarker-brain_set.pdf",outPath)
+```
+
+
+## output the overlapped genes in the enriched brain cell types 
+
+### filter significant brain markers overlapped genes
+
+```{r}
+sig_brain_markers.anno_AD<-celltype_markers.CellMarker.hgnormal_brain.anno_AD %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain)) %>% dplyr::filter((get(ls.sig_CellMarker.brain[1])==1)|(get(ls.sig_CellMarker.brain[2])==1)|(get(ls.sig_CellMarker.brain[3])==1))
+
+sig_brain_set_markers.anno_AD<-celltype_markers.CellMarker_set.hgnormal_brain.anno_AD %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain_set)) %>% dplyr::filter((get(ls.sig_CellMarker.brain_set[1])==1)|(get(ls.sig_CellMarker.brain_set[2])==1))
+
+sig_brain_markers.anno_dementia<-celltype_markers.CellMarker.hgnormal_brain.anno_dementia %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain)) %>% dplyr::filter((get(ls.sig_CellMarker.brain[1])==1)|(get(ls.sig_CellMarker.brain[2])==1)|(get(ls.sig_CellMarker.brain[3])==1))
+
+sig_brain_set_markers.anno_dementia<-celltype_markers.CellMarker_set.hgnormal_brain.anno_dementia %>% dplyr::select(entrezgene_id,GENE,all_of(ls.sig_CellMarker.brain_set)) %>% dplyr::filter((get(ls.sig_CellMarker.brain_set[1])==1)|(get(ls.sig_CellMarker.brain_set[2])==1))
+```
+
+### filter specific gene sets overlapped significant brain markers
+
+```{r}
+# method 1
+
+overlap.sig_brain_set_markers_caseAD<-attr(venn(list(sig_brain_set_markers.anno_AD$entrezgene_id,list_case_AD)), "intersections")
+overlap.sig_brain_markers_caseAD<-attr(venn(list(sig_brain_markers.anno_AD$entrezgene_id,list_case_AD)), "intersections")
+overlap.sig_brain_markers_PPIdementia<-attr(venn(list(sig_brain_markers.anno_dementia$entrezgene_id,dementia_PPI_cluster)), "intersections")
+overlap.sig_brain_markers_PPIAD<-attr(venn(list(sig_brain_markers.anno_AD$entrezgene_id,AD_PPI_cluster)), "intersections")
+
+overlap.sig_brain_set_markers_caseAD<-overlap.sig_brain_set_markers_caseAD$`A:B`
+overlap.sig_brain_markers_caseAD<-overlap.sig_brain_markers_caseAD$`A:B`
+overlap.sig_brain_markers_PPIdementia<-overlap.sig_brain_markers_PPIdementia$`A:B`
+overlap.sig_brain_markers_PPIAD<-overlap.sig_brain_markers_PPIAD$`A:B`
+
+# method 2
+
+overlap.sig_brain_set_markers_caseAD<-sig_brain_set_markers.anno_AD %>% dplyr::filter(entrezgene_id %in% list_case_AD)
+overlap.sig_brain_markers_caseAD<-sig_brain_markers.anno_AD %>% dplyr::filter(entrezgene_id %in% list_case_AD)
+overlap.sig_brain_markers_PPIdementia<-sig_brain_markers.anno_dementia %>% dplyr::filter(entrezgene_id %in% dementia_PPI_cluster)
+overlap.sig_brain_markers_PPIAD<-sig_brain_markers.anno_AD %>% dplyr::filter(entrezgene_id %in% AD_PPI_cluster)
+```
+
+### output results
+
+```{r}
+overlap.sig_brain.list<-list()
+overlap.sig_brain.list$sigbrain_set_caseAD<-overlap.sig_brain_set_markers_caseAD
+overlap.sig_brain.list$sigbrain_caseAD<-overlap.sig_brain_markers_caseAD
+overlap.sig_brain.list$sigbrain_PPIdementia<-overlap.sig_brain_markers_PPIdementia
+overlap.sig_brain.list$sigbrain_PPIAD<-overlap.sig_brain_markers_PPIAD
+write.xlsx(overlap.sig_brain.list,paste(outPath,"case_genesets_overlapped_significant_brainmarkers.xlsx",sep = '/'))
+```
+
+## add evidence to the ranking list
+
+```{r}
+# the previous script in "WGCNA_brainregioncombined_enrichment_analysis-GO"
+
+evidence_df<-read.xlsx("evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+## overlap with brain cell type markers or not
+
+### brain markers
+gene_list<-celltype_markers.CellMarker.hgnormal_brain$geneID %>% unique # 600
+evidence_df$CellMarker_brainmarker_overlap<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% gene_list){1}else{0}}) %>% unlist
+
+### brain markers from set
+gene_list<-celltype_markers.CellMarker_set.hgnormal_brain$geneID %>% unique # 592
+evidence_df$CellMarker_set_brainmarker_overlap<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% gene_list){1}else{0}}) %>% unlist
+
+## enriched in the brain-related cell-types or not
+### no result! since there is just one gene overlap with brain markers (Astrocyte)
+
+write.xlsx(evidence_df,"evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "ALLENexpdata_exploration"
+```
+
+## save.image
+
+```{r}
+save.image("R07_singlecell_marker_enrichment_analysis_CellMarker.RData")
+```
