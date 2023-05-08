@@ -1,0 +1,537 @@
+---
+title: "WGCNA analysis using RNA-seq data from Allen Human Brain Atlas"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/")
+
+```{r, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+library(WGCNA)
+library(openxlsx)
+suppressPackageStartupMessages(library(magrittr))
+library(tibble)
+library(biomaRt)
+library(operators)
+library(lattice)
+library(RColorBrewer)
+library(gprofiler2)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(stringr)
+library(gplots)
+
+source("function.WGCNA_brainregioncombined_enrichment_analysis-GO.R")
+outPath <- "/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/WGCNA_enrichment_analysis"
+```
+
+################################################################################
+#
+# module-trait association result exploration
+#
+################################################################################
+
+## load data
+
+```{r}
+inPath <- '/AD_exome/Downstream_analyses/AD_downstream_scripts/WGCNA_enrichment_analysis/hpc_consensus'
+load(paste(inPath,"New_Consensus-Network_module-trait-association.RData",sep = '/'))
+setLabels = c("TCx","HIP","PCx") # corresponding to the three sub data frames in order
+```
+
+## obtain significant trait-associated modules
+
+### single-trait specific
+
+```{r}
+modulespecific.TCx.Disease_state<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 1,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c(">=","<",">=",">="))  %>% cbind(.,group=rep("modulespecific.TCx.Disease_state",nrow(.))) %>% dplyr::arrange(MEColorNames)
+modulespecific.HIP.Disease_state<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 2,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c(">=","<",">=",">="))  %>% cbind(.,group=rep("modulespecific.HIP.Disease_state",nrow(.))) %>% dplyr::arrange(MEColorNames)
+modulespecific.PCx.Disease_state<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 3,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c(">=","<",">=",">=")) %>% cbind(.,group=rep("modulespecific.PCx.Disease_state",nrow(.))) %>% dplyr::arrange(MEColorNames)# not exist!
+
+modulespecific.TCx.age<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 1,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("<",">=",">=",">="))  %>% cbind(.,group=rep("modulespecific.TCx.age",nrow(.))) %>% dplyr::arrange(MEColorNames)
+modulespecific.HIP.age<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 2,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("<",">=",">=",">="))  %>% cbind(.,group=rep("modulespecific.HIP.age",nrow(.))) %>% dplyr::arrange(MEColorNames)
+modulespecific.PCx.age<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 3,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("<",">=",">=",">="))  %>% cbind(.,group=rep("modulespecific.PCx.age",nrow(.))) %>% dplyr::arrange(MEColorNames)
+
+modulespecific.TCx.apo_e4<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 1,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c(">=",">=",">=","<"))  %>% cbind(.,group=rep("modulespecific.TCx.apo_e4",nrow(.))) %>% dplyr::arrange(MEColorNames)
+modulespecific.HIP.apo_e4<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 2,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c(">=",">=",">=","<"))  %>% cbind(.,group=rep("modulespecific.HIP.apo_e4",nrow(.))) %>% dplyr::arrange(MEColorNames) # not exist!
+modulespecific.PCx.apo_e4<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 3,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c(">=",">=",">=","<"))  %>% cbind(.,group=rep("modulespecific.PCx.apo_e4",nrow(.))) %>% dplyr::arrange(MEColorNames)
+
+Disease_state<-rbind(modulespecific.TCx.Disease_state,modulespecific.HIP.Disease_state,modulespecific.PCx.Disease_state) %>% dplyr::select("MEColorNames") %>% table %>% as.data.frame
+Disease_state$trait<-rep("Disease_state",nrow(Disease_state))
+age<-rbind(modulespecific.TCx.age,modulespecific.HIP.age,modulespecific.PCx.age) %>% dplyr::select("MEColorNames") %>% table %>% as.data.frame
+age$trait<-rep("age",nrow(age))
+apo_e4<-rbind(modulespecific.TCx.apo_e4,modulespecific.HIP.apo_e4,modulespecific.PCx.apo_e4) %>% dplyr::select("MEColorNames") %>% table %>% as.data.frame
+apo_e4$trait<-rep("apo_e4_allele",nrow(apo_e4))
+
+modulespecific.traits<-rbind(Disease_state,age,apo_e4) %>% dplyr::rename(c(MEColorNames=.)) %>% dplyr::filter(MEColorNames!="not exist!") %>% arrange(desc(Freq))
+rm(Disease_state,age,apo_e4)
+unique(modulespecific.traits$MEColorNames)
+```
+
+### age or disease-state associated modules
+
+```{r}
+age_disease.TCx<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 1,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("","<",">=",">="))
+age_disease.HIP<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 2,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("","<",">=",">="))
+age_disease.PCx<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 3,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("","<",">=",">="))
+
+age_disease.TCx %<>% rbind(.,get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 1,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("<","",">=",">=")))
+age_disease.HIP %<>% rbind(.,get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 2,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("<","",">=",">=")))
+age_disease.PCx %<>% rbind(.,get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 3,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("<","",">=",">=")))
+
+age_disease.traits<-rbind(age_disease.TCx,age_disease.HIP,age_disease.PCx) %>% dplyr::select("MEColorNames") %>% table %>% as.data.frame %>% dplyr::rename(c(MEColorNames=.)) %>% dplyr::filter(MEColorNames!="not exist!") %>% arrange(desc(Freq))
+age_disease.traits$trait<-rep("age or disease-state",nrow(age_disease.traits))
+
+unique(age_disease.traits$MEColorNames)
+```
+
+### disease-state associated modules
+
+```{r}
+disease.TCx<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 1,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("","<",">=",">="))
+disease.HIP<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 2,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("","<",">=",">="))
+disease.PCx<-get_sig_trait_Module(moduleTraitPvalue,moduleTraitCor,set_num = 3,trait = c("age","Disease_state","sex","apo_e4_allele"),cutoff_pval = 0.1,largerorsmaller = c("","<",">=",">=")) # "not exist!"
+
+disease.traits<-rbind(disease.TCx,disease.HIP,disease.PCx) %>% dplyr::select("MEColorNames") %>% table %>% as.data.frame %>% dplyr::rename(c(MEColorNames=.)) %>% dplyr::filter(MEColorNames!="not exist!") %>% arrange(desc(Freq))
+disease.traits$trait<-rep("disease-state",nrow(disease.traits))
+
+unique(disease.traits$MEColorNames)
+```
+
+### output module results
+
+```{r}
+modulespecific.TCx.Disease_state$brain<-rep("TCx",nrow(modulespecific.TCx.Disease_state))
+modulespecific.HIP.Disease_state$brain<-rep("HIP",nrow(modulespecific.HIP.Disease_state))
+modulespecific.TCx.Disease_state$trait<-rep("Disease_state",nrow(modulespecific.TCx.Disease_state))
+modulespecific.HIP.Disease_state$trait<-rep("Disease_state",nrow(modulespecific.HIP.Disease_state))
+modulespecific.TCx.age$brain<-rep("TCx",nrow(modulespecific.TCx.age))
+modulespecific.HIP.age$brain<-rep("HIP",nrow(modulespecific.HIP.age))
+modulespecific.PCx.age$brain<-rep("PCx",nrow(modulespecific.PCx.age))
+modulespecific.TCx.age$trait<-rep("age",nrow(modulespecific.TCx.age))
+modulespecific.HIP.age$trait<-rep("age",nrow(modulespecific.HIP.age))
+modulespecific.PCx.age$trait<-rep("age",nrow(modulespecific.PCx.age))
+modulespecific.TCx.apo_e4$brain<-rep("TCx",nrow(modulespecific.TCx.apo_e4))
+modulespecific.PCx.apo_e4$brain<-rep("PCx",nrow(modulespecific.PCx.apo_e4))
+modulespecific.TCx.apo_e4$trait<-rep("apo_e4",nrow(modulespecific.TCx.apo_e4))
+modulespecific.PCx.apo_e4$trait<-rep("apo_e4",nrow(modulespecific.PCx.apo_e4))
+
+modulespecific.combine<-rbind(modulespecific.TCx.Disease_state,modulespecific.HIP.Disease_state,modulespecific.TCx.age,modulespecific.HIP.age,modulespecific.PCx.age,modulespecific.TCx.apo_e4,modulespecific.PCx.apo_e4)
+
+age_disease.TCx$brain<-rep("TCx",nrow(age_disease.TCx))
+age_disease.HIP$brain<-rep("HIP",nrow(age_disease.HIP))
+age_disease.PCx$brain<-rep("PCx",nrow(age_disease.PCx))
+age_disease.TCx$trait<-rep("age or disease",nrow(age_disease.TCx))
+age_disease.HIP$trait<-rep("age or disease",nrow(age_disease.HIP))
+age_disease.PCx$trait<-rep("age or disease",nrow(age_disease.PCx))
+
+age_disease.combine<-rbind(age_disease.TCx,age_disease.HIP,age_disease.PCx)
+
+disease.TCx$brain<-rep("TCx",nrow(disease.TCx))
+disease.HIP$brain<-rep("HIP",nrow(disease.HIP))
+disease.TCx$trait<-rep("disease",nrow(disease.TCx))
+disease.HIP$trait<-rep("disease",nrow(disease.HIP))
+
+disease.combine<-rbind(disease.TCx,disease.HIP)
+
+outmodule.list<-list()
+outmodule.list$modulespecific<-modulespecific.combine
+outmodule.list$age_or_disease<-age_disease.combine
+outmodule.list$disease<-disease.combine
+write.xlsx(outmodule.list,paste(outPath,"modulespecific_age-or-disease_disease_module-list_all.xlsx",sep = '/'))
+```
+
+################################################################################
+#
+# Enrichment analysis of testing genesets in WGCNA modules
+#
+################################################################################
+
+## load original mutation table
+
+```{r, message=FALSE, warning=FALSE}
+
+# background gene sets
+
+inPath.mut <- '/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/burden_test'
+burdenresult_dementia<-read.xlsx(paste(inPath.mut,"burdengenes_result_extraction.xlsx",sep = '/'),sheet = "dementia")
+burdenresult_AD<-read.xlsx(paste(inPath.mut,"burdengenes_result_extraction.xlsx",sep = '/'),sheet = "AD")
+```
+
+## convert ID of most background genes: symbol to ENTREZID
+
+```{r, message=FALSE, warning=FALSE}
+burdenresult_dementia.entrez_id<-bitr(burdenresult_dementia$GENE, fromType = "SYMBOL",
+                                      toType = c("ENTREZID"),
+                                      OrgDb = org.Hs.eg.db) %>% dplyr::rename(c(GENE=SYMBOL, entrezgene_id=ENTREZID))
+
+burdenresult_AD.entrez_id<-bitr(burdenresult_AD$GENE, fromType = "SYMBOL",
+                                      toType = c("ENTREZID"),
+                                      OrgDb = org.Hs.eg.db) %>% dplyr::rename(c(GENE=SYMBOL, entrezgene_id=ENTREZID))
+
+burdenresult_dementia<-merge(burdenresult_dementia,burdenresult_dementia.entrez_id,by=c("GENE"),all.x=TRUE)
+burdenresult_AD<-merge(burdenresult_AD,burdenresult_AD.entrez_id,by=c("GENE"),all.x=TRUE)
+
+rm(burdenresult_dementia.entrez_id,burdenresult_AD.entrez_id)
+```
+
+## output result files
+
+```{r}
+annotate_list<-list()
+annotate_list$dementia<-burdenresult_dementia
+annotate_list$AD<-burdenresult_AD
+write.xlsx(annotate_list,paste(inPath.mut,'burdengenes_result_extraction.annotated.xlsx',sep = '/'))
+
+# output unmapped genes for further annotation
+
+unmapped.burdenresult_dementia<-burdenresult_dementia %>% dplyr::filter(is.na(entrezgene_id)) %>% dplyr::select(GENE)
+unmapped.burdenresult_AD<-burdenresult_AD %>% dplyr::filter(is.na(entrezgene_id)) %>% dplyr::select(GENE)
+write.table(unmapped.burdenresult_dementia,paste(inPath.mut,'unmapped.burdenresult_dementia.GENE.txt',sep = '/'),quote = F,row.names = F,col.names = T)
+write.table(unmapped.burdenresult_AD,paste(inPath.mut,'unmapped.burdenresult_AD.GENE.txt',sep = '/'),quote = F,row.names = F,col.names = T)
+rm(unmapped.burdenresult_dementia,unmapped.burdenresult_AD)
+```
+
+## further processing the background gene tables (after further annotation of the unmapped genes)
+
+```{r, message=FALSE, warning=FALSE}
+unmapped.burdenresult_dementia.anno<-read.xlsx(paste(inPath.mut,'metascape_result.burdengenes_result_extraction.dementia.unmapped.xlsx',sep = '/')) %>% dplyr::filter(!is.na(Gene.ID))
+unmapped.burdenresult_AD.anno<-read.xlsx(paste(inPath.mut,'metascape_result.burdengenes_result_extraction.AD.unmapped.xlsx',sep = '/')) %>% dplyr::filter(!is.na(Gene.ID))
+
+for(i in 1:nrow(unmapped.burdenresult_dementia.anno)){
+  burdenresult_dementia$entrezgene_id[which(burdenresult_dementia$GENE == unmapped.burdenresult_dementia.anno[i,'GENE'])] <- unmapped.burdenresult_dementia.anno[i,'Gene.ID']
+}
+
+for(i in 1:nrow(unmapped.burdenresult_AD.anno)){
+  burdenresult_AD$entrezgene_id[which(burdenresult_AD$GENE == unmapped.burdenresult_AD.anno[i,'GENE'])] <- unmapped.burdenresult_AD.anno[i,'Gene.ID']
+}
+
+annotate_list<-list()
+annotate_list$dementia<-burdenresult_dementia
+annotate_list$AD<-burdenresult_AD
+write.xlsx(annotate_list,paste(inPath.mut,'burdengenes_result_extraction.annotated.xlsx',sep = '/'))
+rm(annotate_list)
+
+# Delete genes without mapped entrezgene_id (entrezgene_id==NA)
+burdenresult_dementia %<>% dplyr::filter(!is.na(entrezgene_id))
+burdenresult_AD %<>% dplyr::filter(!is.na(entrezgene_id))
+# Select useful columns
+burdenresult_dementia %<>% dplyr::select(GENE,entrezgene_id)
+burdenresult_AD %<>% dplyr::select(GENE,entrezgene_id)
+```
+
+## load network files & testing gene sets
+
+```{r}
+# consensusAnalysis-CombinedNetworkResults
+
+consensus_network.res<-read.csv(paste(inPath,"New_consensusAnalysis-CombinedNetworkResults.csv",sep = '/'))
+
+# testing gene sets
+
+load('R02_significant_burdened_and_caseonly_mutated.genesets.RData')
+load('R03_burdengenes_PPIpartner_extraction.genesets.RData')
+load('outfile_GENES.case.AD_dementia.genesets.RData')
+
+# dementia_PPI_cluster
+# AD_PPI_cluster
+
+list_burden_dementia<-burdengenes_dementia_list$ENTREZID
+list_burden_AD<-burdengenes_AD_list$ENTREZID
+
+list_caseonly_dementia<-all_burdened_caseonly$dementia.caseonly$ENTREZID
+list_caseonly_AD<-all_burdened_caseonly$AD.caseonly$ENTREZID
+list_caseonly_and_burden_all<-all_burdened_caseonly$all.caseonly_an_burdened$ENTREZID
+
+list_case_dementia %<>% dplyr::pull(ENTREZID)
+list_case_AD %<>% dplyr::pull(ENTREZID)
+```
+
+## obtain GC content and gene length of background genes
+
+```{r}
+get_genelengthGCcontent <- local({
+	source("function.singlecell_marker_enrichment_analysis_CellMarker.R", local = TRUE)
+	environment(get_genelengthGCcontent) <- .GlobalEnv
+	get_genelengthGCcontent
+})
+
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+mart_attribute<-listAttributes(mart)
+#Transcript length (including UTRs and CDS)
+#Gene % GC content
+burdenresult_dementia<-get_genelengthGCcontent(burdenresult_dementia)
+burdenresult_AD<-get_genelengthGCcontent(burdenresult_AD)
+
+annotate_list<-list()
+annotate_list$dementia<-burdenresult_dementia
+annotate_list$AD<-burdenresult_AD
+write.xlsx(annotate_list,paste(inPath.mut,'burdengenes_result_extraction.annotated.length_gc.xlsx',sep = '/'))
+rm(annotate_list)
+
+rm(mart,mart_attribute)
+```
+
+## Section 1: Prepare background annotation data
+
+```{r, message=FALSE, warning=FALSE}
+WGCNAmodule.anno_dementia<-get_WGCNAmodule_annotation(geneinfo = consensus_network.res, df.background = burdenresult_dementia)
+WGCNAmodule.anno_AD<-get_WGCNAmodule_annotation(geneinfo = consensus_network.res, df.background = burdenresult_AD)
+```
+
+## Section 2: module enrichment test
+
+```{r, message=FALSE, warning=FALSE}
+module_enrich_res.burdendementia<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_dementia,disease_genes = list_burden_dementia)
+module_enrich_res.burdenAD<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_AD,disease_genes = list_burden_AD)
+
+module_enrich_res.caseonly_dementia<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_dementia,disease_genes = list_caseonly_dementia)
+module_enrich_res.caseonly_AD<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_AD,disease_genes = list_caseonly_AD)
+
+module_enrich_res.case_dementia<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_dementia,disease_genes = list_case_dementia)
+module_enrich_res.case_AD<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_AD,disease_genes = list_case_AD)
+
+module_enrich_res.PPI_dementia<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_dementia,disease_genes = dementia_PPI_cluster)
+module_enrich_res.PPI_AD<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_AD,disease_genes = AD_PPI_cluster)
+```
+
+## Section 3: filter significant results
+
+```{r, message=FALSE, warning=FALSE}
+sig_WGCNAmodule.burdendementia<-get_WGCNAmodule_enrichfilter(module_enrich_res.burdendementia,p_adjust_value = 0.1)
+sig_WGCNAmodule.burdenAD<-get_WGCNAmodule_enrichfilter(module_enrich_res.burdenAD,p_adjust_value = 0.1)
+
+sig_WGCNAmodule.caseonly_dementia<-get_WGCNAmodule_enrichfilter(module_enrich_res.caseonly_dementia,p_adjust_value = 0.1)
+sig_WGCNAmodule.caseonly_AD<-get_WGCNAmodule_enrichfilter(module_enrich_res.caseonly_AD,p_adjust_value = 0.1)
+
+sig_WGCNAmodule.case_dementia<-get_WGCNAmodule_enrichfilter(module_enrich_res.case_dementia,p_adjust_value = 0.1)
+sig_WGCNAmodule.case_AD<-get_WGCNAmodule_enrichfilter(module_enrich_res.case_AD,p_adjust_value = 0.1)
+
+sig_WGCNAmodule.PPI_dementia<-get_WGCNAmodule_enrichfilter(module_enrich_res.PPI_dementia,p_adjust_value = 0.1)
+sig_WGCNAmodule.PPI_AD<-get_WGCNAmodule_enrichfilter(module_enrich_res.PPI_AD,p_adjust_value = 0.1)
+```
+
+### save significant enrichment results
+
+```{r}
+xl_list_module<-list()
+
+xl_list_module$sig_burden_dementia<-sig_WGCNAmodule.burdendementia
+xl_list_module$sig_burden_AD<-sig_WGCNAmodule.burdenAD # "Not exist!"
+
+xl_list_module$sig_caseonly_dementia<-sig_WGCNAmodule.caseonly_dementia
+xl_list_module$sig_caseonly_AD<-sig_WGCNAmodule.caseonly_AD
+
+xl_list_module$sig_case_dementia<-sig_WGCNAmodule.case_dementia
+xl_list_module$sig_case_AD<-sig_WGCNAmodule.case_AD
+
+xl_list_module$sig_PPI_dementia<-sig_WGCNAmodule.PPI_dementia
+xl_list_module$sig_PPI_AD<-sig_WGCNAmodule.PPI_AD # "Not exist!"
+
+## output result tables
+
+write.xlsx(xl_list_module,paste(outPath,"WGCNAmodule_enrich_sig.xlsx",sep = '/'))
+rm(xl_list_module)
+```
+
+################################################################################
+#
+# Plot drawing
+#
+################################################################################
+
+## prepare data for visualization
+
+```{r message=FALSE, warning=FALSE}
+## collect all the significant modules
+
+ls.sig_WGCNAmodule<-unique(c(sig_WGCNAmodule.burdendementia$ModuleColor,sig_WGCNAmodule.caseonly_dementia$ModuleColor,sig_WGCNAmodule.caseonly_AD$ModuleColor,sig_WGCNAmodule.case_dementia$ModuleColor,sig_WGCNAmodule.case_AD$ModuleColor,sig_WGCNAmodule.PPI_dementia$ModuleColor)) %>% sort
+
+## add group and combine
+
+plt.burdendementia<-module_enrich_res.burdendementia %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("burdened dementia",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+plt.burdenAD<-module_enrich_res.burdenAD %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("burdened AD",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+
+plt.caseonly_dementia<-module_enrich_res.caseonly_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("case-only dementia",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+plt.caseonly_AD<-module_enrich_res.caseonly_AD %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("case-only AD",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+
+plt.case_dementia<-module_enrich_res.case_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("case dementia",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+plt.case_AD<-module_enrich_res.case_AD %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("case AD",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+
+plt.PPI_dementia<-module_enrich_res.PPI_dementia %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("PPI dementia",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+plt.PPI_AD<-module_enrich_res.PPI_AD %>% dplyr::filter(rownames(.) %in% ls.sig_WGCNAmodule) %>% cbind(.,group=rep("PPI AD",length(ls.sig_WGCNAmodule))) %>% arrange(ModuleColor)
+
+# res enrich plt combine
+
+plt.all<-rbind(plt.burdendementia,plt.burdenAD,plt.caseonly_dementia,plt.caseonly_AD,plt.case_dementia,plt.case_AD,plt.PPI_dementia,plt.PPI_AD)
+
+# output significant result tables
+
+write.xlsx(plt.all,paste(outPath,"WGCNAmodule_sigvisual_table_allgroups.xlsx",sep = '/'))
+```
+
+## data visualization
+
+### plot drawing
+
+```{r, message=FALSE, warning=FALSE}
+heatmap.plt.all<-get_heatmatrix(WGCNAmodule_enrich=plt.all,ls.sig_WGCNAmodule,testing_set_name="WGCNA module enrichment")
+```
+
+### output the plots
+
+```{r}
+# define trellis object saving function
+
+save_trellis <- function(heatmap_plot,ls.sig_WGCNAmodule,file_name,save_path){
+ pdf(paste(save_path,file_name,sep = '/'),height=20,width=2+20*length(ls.sig_WGCNAmodule)/12)
+ print(heatmap_plot)
+ dev.off()
+}
+
+# save plot
+
+save_trellis(heatmap.plt.all,ls.sig_WGCNAmodule,"plot_WGCNAmodule_enrichment_all.pdf",outPath)
+```
+
+################################################################################
+#
+# GO BP analysis of module genes
+#
+################################################################################
+
+## GO BP enrichment test
+
+### gProfiler
+
+```{r, message=FALSE, warning=FALSE}
+module_pathway_gprofiler <- get_module_pathway_gprofiler(module_list = ls.sig_WGCNAmodule,geneinfo = consensus_network.res)
+write.xlsx(module_pathway_gprofiler,paste(outPath,"/GOBP_WGCNA_sigmodule_gprofiler.xlsx",sep = ''),rowNames = F)
+```
+
+### clusterprofiler
+
+```{r, message=FALSE, warning=FALSE}
+module_pathway_clusterprofiler <- get_module_pathway_clusterprofiler(module_list = ls.sig_WGCNAmodule,geneinfo = consensus_network.res)
+write.xlsx(module_pathway_clusterprofiler,paste(outPath,"/GOBP_WGCNA_sigmodule_clusterprofiler.xlsx",sep = ''),rowNames = F)
+
+unique(module_pathway_clusterprofiler$ModuleColor)
+```
+
+### (optional) clusterprofilter (all modules)
+
+```{r, message=FALSE, warning=FALSE}
+module_pathway_clusterprofiler.allmodules <- get_module_pathway_clusterprofiler(module_list = consensus_network.res$ModuleColor %>% unique(),geneinfo = consensus_network.res)
+write.xlsx(module_pathway_clusterprofiler.allmodules,paste(outPath,"/GOBP_WGCNA_allmodules_clusterprofiler.xlsx",sep = ''),rowNames = F)
+rm(module_pathway_clusterprofiler.allmodules)
+```
+
+## module enrichment plot
+
+### overlap of sig_WGCNAmodule and trait-associated modules
+
+```{r}
+ME.age_disease<-age_disease.traits$MEColorNames
+ME.modulespecific<-modulespecific.traits$MEColorNames
+ME.sig_WGCNAmodule.clusterprofiler<-unique(module_pathway_clusterprofiler$ModuleColor)
+
+input.sig.age_disease<-list(ME.age_disease,ME.sig_WGCNAmodule.clusterprofiler)
+input.sig.modulespecific<-list(ME.modulespecific,ME.sig_WGCNAmodule.clusterprofiler)
+
+output.sig.age_disease<-attr(venn(input.sig.age_disease), "intersections")
+output.sig.modulespecific<-attr(venn(input.sig.modulespecific), "intersections")
+
+overlap.sig.age_disease<-output.sig.age_disease$`A:B`
+overlap.sig.modulespecific<-output.sig.modulespecific$`A:B`
+```
+
+### plot the overlap modules
+
+```{r}
+# GO:BP barplot
+
+module_list<-unique(c(overlap.sig.age_disease,overlap.sig.modulespecific))
+term_num<-rep(10,length(module_list))
+overlap.plt<-get_pathway_barplot(module_pathway_clusterprofiler,module.list = module_list,term_num.list = term_num)
+
+# output plots
+
+pdf(paste(outPath,"plot_GOBP_moduleoverlap_age-or-disease-with-trait-specific_sigWGCNAtest.pdf",sep = '/'))
+for(i in 1:length(overlap.plt)){
+  print(overlap.plt[[i]])
+}
+dev.off()
+```
+
+## add evidence to the ranking list
+
+### in age-or-disease related modules or not
+
+```{r}
+# the previous script in "pathwaybased_enrichment_plots"
+
+evidence_df<-read.xlsx("evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+gene_list<-consensus_network.res %>% dplyr::filter(ModuleColor %in% age_disease.traits$MEColorNames) %>% dplyr::pull(EntrezID)
+evidence_df$age_disease_modules<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% gene_list){1}else{0}}) %>% unlist
+```
+
+### co-occur with AD known genes in the same modules or not
+
+```{r}
+# AD known gene exploration in WGCNA results
+
+## overlap
+
+AD_known_genes<-read.table("AD_knownsig_geneset_v2.txt")[,1]
+AD_known_genes.overlapmodules<-consensus_network.res %>% dplyr::filter(EntrezID %in% AD_known_genes) %>% dplyr::pull(ModuleColor) %>% unique %>% lapply(.,function(x){if(x != "grey"){x}}) %>% unlist
+AD_known_genes.overlapmodules.df<-consensus_network.res %>% dplyr::filter(EntrezID %in% AD_known_genes) %>% dplyr::pull(ModuleColor) %>% lapply(.,function(x){if(x != "grey"){x}}) %>% unlist %>% table %>% as.data.frame %>% arrange(desc(Freq))
+AD_known_genes.overlapmodules.genes<-consensus_network.res %>% dplyr::filter(EntrezID %in% AD_known_genes) %>% dplyr::select(EntrezID,ModuleColor) %>% dplyr::filter(ModuleColor!="grey") %>% arrange(ModuleColor)
+
+## module enrichment
+
+module_enrich_res.AD_known_genes<-get_WGCNAmodule_Enrichment(WGCNAmodule.anno_dementia,disease_genes = AD_known_genes)
+sig_WGCNAmodule.AD_known_genes<-get_WGCNAmodule_enrichfilter(module_enrich_res.AD_known_genes,p_adjust_value = 0.1)
+
+## output results of AD known gene exploration
+
+AD_known_genes_res.list<-list()
+AD_known_genes_res.list$overlapmodules<-AD_known_genes.overlapmodules.genes
+AD_known_genes_res.list$sig_WGCNAmodule<-sig_WGCNAmodule.AD_known_genes
+write.xlsx(AD_known_genes_res.list,paste(outPath,"AD-known-genes_overlapped-and-sigenriched_modules.xlsx",sep = '/'))
+
+# add evidencF: co-occur with AD known genes in the same modules
+
+gene_list<-consensus_network.res %>% dplyr::filter(ModuleColor %in% AD_known_genes.overlapmodules) %>% dplyr::pull(EntrezID)
+evidence_df$overlap_ADknowngenes_modules<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% gene_list){1}else{0}}) %>% unlist
+```
+
+### in cilium or microtube-related modules or not
+
+```{r}
+# mark related modules
+
+mark<-module_pathway_clusterprofiler$Description %>% grepl("sperm",.) %>% lapply(.,isFALSE) %>% unlist
+filter.module_pathway_clusterprofiler<-module_pathway_clusterprofiler %>% filter(mark)
+mark<-grepl("microtubule|axoneme|cytoskeleton|cilium",filter.module_pathway_clusterprofiler$Description)
+filter.module_pathway_clusterprofiler %<>% filter(mark)
+write.xlsx(filter.module_pathway_clusterprofiler,paste(outPath,"allsig_cilium-or-microtube-related-modules_pathway-clusterprofiler.xlsx",sep = '/'))
+filter.module<-filter.module_pathway_clusterprofiler %>% dplyr::pull(ModuleColor) %>% unique
+
+# add evidence
+
+gene_list<-consensus_network.res %>% dplyr::filter(ModuleColor %in% filter.module) %>% dplyr::pull(EntrezID)
+evidence_df$microtubule_cilium_related_modules<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% gene_list){1}else{0}}) %>% unlist
+
+write.xlsx(evidence_df,"evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "singlecell_marker_enrichment_analysis_CellMarker"
+```
+
+## save image
+
+```{r}
+save.image("R06_WGCNA_brainregioncombined_enrichment_analysis-GO.RData")
+```
