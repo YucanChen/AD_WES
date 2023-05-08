@@ -1,0 +1,254 @@
+---
+title: "pathway enrichment analysis"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+library(gprofiler2)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(colorfindr)
+library(RColorBrewer)
+library(stringr)
+
+source("function.pathwaybased_enrichment_plots.R")
+outPath <- "/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/pathwaybased_enrichment"
+```
+
+## load data
+
+```{r}
+# testing gene sets in this study
+
+load("R02_significant_burdened_and_caseonly_mutated.genesets.RData")
+load("R03_burdengenes_PPIpartner_extraction.genesets.RData")
+
+## case genes in the outfiles
+inPath.case<-'/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/burden_test'
+list_case_AD<-read.xlsx(paste(inPath.case,"metascape_result.outfile_GENES.AD_case.xlsx",sep = '/'))[,1:2] %>% dplyr::rename(.,GENE=hits,ENTREZID=Gene.ID)
+list_case_dementia<-read.xlsx(paste(inPath.case,"metascape_result.outfile_GENES.dementia_case.xlsx",sep = '/'))[,1:2] %>% dplyr::rename(.,GENE=hits,ENTREZID=Gene.ID)
+save(list_case_AD,list_case_dementia,file = 'outfile_GENES.case.AD_dementia.genesets.RData')
+
+# public data gene sets
+
+list_AD_known<-read.table("AD_knownsig_geneset_v2.txt")[,1]
+inPath.public<-'/AD_exome/Downstream_analyses/AD_downstream_scripts'
+list_ieu_b_2<-read.table(paste(inPath.public,"FUMA_analyses/Public_AD_GWAS_sumstat/ieu-b-2/FUMA_job177321-ieu-b-2/genes.txt",sep = '/'),header = T)[["entrezID"]] %>% na.omit
+list_ieu_a_297<-read.table(paste(inPath.public,"FUMA_analyses/Public_AD_GWAS_sumstat/ieu-a/FUMA_job177320-ieu-a-297-vcf/genes.txt",sep = '/'),header = T)[["entrezID"]] %>% na.omit
+list_Jansenetal<-read.table(paste(inPath.public,"FUMA_analyses/Public_AD_GWAS_sumstat/Jansenetal_2019sept/FUMA_job177338/genes.txt",sep = '/'),header = T)[["entrezID"]] %>% na.omit
+```
+
+## GO:BP & GO:CC analysis
+
+```{r}
+# PPI cluster gene sets
+
+combined_PPI_cluster<-list(dementia_PPI_cluster,AD_PPI_cluster)
+combined_PPI_cluster.names<-c("dementia PPI cluster","AD PPI cluster")
+GOBP_gprofiler.combined_PPI_cluster<-get_pathway_gprofiler(combined_PPI_cluster,combined_PPI_cluster.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_gprofiler.combined_PPI_cluster<-get_pathway_gprofiler(combined_PPI_cluster,combined_PPI_cluster.names,sub_ontology = "CC",padj_value = 0.1)
+GOBP_clusterprofiler.combined_PPI_cluster<-get_pathway_clusterprofiler(combined_PPI_cluster,combined_PPI_cluster.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_clusterprofiler.combined_PPI_cluster<-get_pathway_clusterprofiler(combined_PPI_cluster,combined_PPI_cluster.names,sub_ontology = "CC",padj_value = 0.1)
+
+# burdened gene sets
+
+combined_burdened<-list(burdengenes_dementia_list$ENTREZID,burdengenes_AD_list$ENTREZID)
+combined_burdened.names<-c("burdened dementia","burdened AD")
+GOBP_gprofiler.combined_burdened<-get_pathway_gprofiler(combined_burdened,combined_burdened.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_gprofiler.combined_burdened<-get_pathway_gprofiler(combined_burdened,combined_burdened.names,sub_ontology = "CC",padj_value = 0.1)
+GOBP_clusterprofiler.combined_burdened<-get_pathway_clusterprofiler(combined_burdened,combined_burdened.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_clusterprofiler.combined_burdened<-get_pathway_clusterprofiler(combined_burdened,combined_burdened.names,sub_ontology = "CC",padj_value = 0.1)
+
+# caseonly gene sets
+
+combined_caseonly<-list(all_burdened_caseonly$dementia.caseonly$ENTREZID,all_burdened_caseonly$AD.caseonly$ENTREZID,all_burdened_caseonly$all.caseonly_an_burdened$ENTREZID)
+combined_caseonly.names<-c("caseonly dementia","caseonly AD","caseonly and burdened all")
+GOBP_gprofiler.combined_caseonly<-get_pathway_gprofiler(combined_caseonly,combined_caseonly.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_gprofiler.combined_caseonly<-get_pathway_gprofiler(combined_caseonly,combined_caseonly.names,sub_ontology = "CC",padj_value = 0.1)
+GOBP_clusterprofiler.combined_caseonly<-get_pathway_clusterprofiler(combined_caseonly,combined_caseonly.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_clusterprofiler.combined_caseonly<-get_pathway_clusterprofiler(combined_caseonly,combined_caseonly.names,sub_ontology = "CC",padj_value = 0.1)
+
+# case gene sets
+
+combined_case<-list(list_case_dementia$ENTREZID,list_case_AD$ENTREZID)
+combined_case.names<-c("case dementia","case AD")
+GOBP_gprofiler.combined_case<-get_pathway_gprofiler(combined_case,combined_case.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_gprofiler.combined_case<-get_pathway_gprofiler(combined_case,combined_case.names,sub_ontology = "CC",padj_value = 0.1)
+GOBP_clusterprofiler.combined_case<-get_pathway_clusterprofiler(combined_case,combined_case.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_clusterprofiler.combined_case<-get_pathway_clusterprofiler(combined_case,combined_case.names,sub_ontology = "CC",padj_value = 0.1)
+
+# public gene sets
+
+combined_public<-list(list_AD_known,list_ieu_b_2,list_ieu_a_297,list_Jansenetal)
+combined_public.names<-c("curated AD known","GWAS ieu-b-2","GWAS ieu-a-297","GWAS Jansenetal")
+GOBP_gprofiler.combined_public<-get_pathway_gprofiler(combined_public,combined_public.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_gprofiler.combined_public<-get_pathway_gprofiler(combined_public,combined_public.names,sub_ontology = "CC",padj_value = 0.1)
+GOBP_clusterprofiler.combined_public<-get_pathway_clusterprofiler(combined_public,combined_public.names,sub_ontology = "BP",padj_value = 0.1)
+GOCC_clusterprofiler.combined_public<-get_pathway_clusterprofiler(combined_public,combined_public.names,sub_ontology = "CC",padj_value = 0.1)
+```
+
+## output the enrichment results: clusterprofiler
+
+```{r}
+enrichBP_gprofiler<-list()
+enrichBP_gprofiler$combined_PPI_cluster<-GOBP_gprofiler.combined_PPI_cluster
+enrichBP_gprofiler$combined_burdened<-GOBP_gprofiler.combined_burdened
+enrichBP_gprofiler$combined_caseonly<-GOBP_gprofiler.combined_caseonly
+enrichBP_gprofiler$combined_case<-GOBP_gprofiler.combined_case
+enrichBP_gprofiler$combined_public<-GOBP_gprofiler.combined_public
+
+enrichBP_clusterProfiler<-list()
+enrichBP_clusterProfiler$combined_PPI_cluster<-GOBP_clusterprofiler.combined_PPI_cluster
+enrichBP_clusterProfiler$combined_burdened<-GOBP_clusterprofiler.combined_burdened
+enrichBP_clusterProfiler$combined_caseonly<-GOBP_clusterprofiler.combined_caseonly
+enrichBP_clusterProfiler$combined_case<-GOBP_clusterprofiler.combined_case
+enrichBP_clusterProfiler$combined_public<-GOBP_clusterprofiler.combined_public
+
+enrichCC_gprofiler<-list()
+enrichCC_gprofiler$combined_PPI_cluster<-GOCC_gprofiler.combined_PPI_cluster
+enrichCC_gprofiler$combined_burdened<-GOCC_gprofiler.combined_burdened
+enrichCC_gprofiler$combined_caseonly<-GOCC_gprofiler.combined_caseonly
+enrichCC_gprofiler$combined_case<-GOCC_gprofiler.combined_case
+enrichCC_gprofiler$combined_public<-GOCC_gprofiler.combined_public
+
+enrichCC_clusterProfiler<-list()
+enrichCC_clusterProfiler$combined_PPI_cluster<-GOCC_clusterprofiler.combined_PPI_cluster
+enrichCC_clusterProfiler$combined_burdened<-GOCC_clusterprofiler.combined_burdened
+enrichCC_clusterProfiler$combined_caseonly<-GOCC_clusterprofiler.combined_caseonly
+enrichCC_clusterProfiler$combined_case<-GOCC_clusterprofiler.combined_case
+enrichCC_clusterProfiler$combined_public<-GOCC_clusterprofiler.combined_public
+
+write.xlsx(enrichBP_gprofiler,paste(outPath,"/enrichBP_combined_res_gprofiler.xlsx",sep = ''))
+write.xlsx(enrichBP_clusterProfiler,paste(outPath,"/enrichBP_combined_res_clusterProfiler.xlsx",sep = ''))
+write.xlsx(enrichCC_gprofiler,paste(outPath,"/enrichCC_combined_res_gprofiler.xlsx",sep = ''))
+write.xlsx(enrichCC_clusterProfiler,paste(outPath,"/enrichCC_combined_res_clusterProfiler.xlsx",sep = ''))
+
+rm(enrichBP_gprofiler,enrichBP_clusterProfiler,enrichCC_gprofiler,enrichCC_clusterProfiler)
+```
+
+## Drawing the plot
+
+### GO:BP
+
+```{r, message=FALSE, warning=FALSE}
+palette_name.BP="Set1"
+
+pdf(paste(outPath,"plot_bubblechart_GOBP_pathway-enrichment_genesets.pdf",sep = '/'))
+
+# PPI cluster gene sets
+
+get_GOres_bubblechart(GOres_combined = GOBP_clusterprofiler.combined_PPI_cluster,term_num.list = c(10,10,10),out_group.list = unique(GOBP_clusterprofiler.combined_PPI_cluster$group),palette_name = palette_name.BP,plot_title = "GO-BP: PPI cluster gene sets")
+
+
+# burdened gene sets
+
+get_GOres_bubblechart(GOres_combined = GOBP_clusterprofiler.combined_burdened,term_num.list = c(10,10),out_group.list = unique(GOBP_clusterprofiler.combined_burdened$group),palette_name = palette_name.BP,plot_title = "GO-BP: burdened gene sets")
+
+# caseonly gene sets
+
+get_GOres_bubblechart(GOres_combined = GOBP_clusterprofiler.combined_caseonly,term_num.list = c(10,10,10,10),out_group.list = unique(GOBP_clusterprofiler.combined_caseonly$group),palette_name = palette_name.BP,plot_title = "GO-BP: caseonly gene sets")
+
+# case gene sets
+
+get_GOres_bubblechart(GOres_combined = GOBP_clusterprofiler.combined_case,term_num.list = c(10,10,10),out_group.list = unique(GOBP_clusterprofiler.combined_case$group),palette_name = palette_name.BP,plot_title = "GO-BP: case gene sets")
+
+dev.off()
+```
+
+### GO:CC
+
+```{r, message=FALSE, warning=FALSE}
+palette_name.CC="RdYlBu"
+
+pdf(paste(outPath,"plot_bubblechart_GOCC_pathway-enrichment_genesets.pdf",sep = '/'))
+
+# PPI cluster gene sets
+
+get_GOres_bubblechart(GOres_combined = GOCC_clusterprofiler.combined_PPI_cluster,term_num.list = c(10,10,10),out_group.list = unique(GOCC_clusterprofiler.combined_PPI_cluster$group),palette_name = palette_name.CC,plot_title = "GO-CC: PPI cluster gene sets")
+
+# burdened gene sets
+
+get_GOres_bubblechart(GOres_combined = GOCC_clusterprofiler.combined_burdened,term_num.list = c(10),out_group.list = unique(GOCC_clusterprofiler.combined_burdened$group),palette_name = palette_name.CC,plot_title = "GO-CC: burdened gene sets")
+
+# caseonly gene sets
+
+get_GOres_bubblechart(GOres_combined = GOCC_clusterprofiler.combined_caseonly,term_num.list = c(10,10,10,10),out_group.list = unique(GOCC_clusterprofiler.combined_caseonly$group),palette_name = palette_name.CC,plot_title = "GO-CC: caseonly gene sets")
+
+# case gene sets
+
+get_GOres_bubblechart(GOres_combined = GOCC_clusterprofiler.combined_case,term_num.list = c(10,10,10),out_group.list = unique(GOCC_clusterprofiler.combined_case$group),palette_name = palette_name.CC,plot_title = "GO-CC: case gene sets")
+
+# public gene sets
+
+get_GOres_bubblechart(GOres_combined = GOCC_clusterprofiler.combined_public,term_num.list = c(10,10,10,10),out_group.list = unique(GOCC_clusterprofiler.combined_public$group),palette_name = palette_name.CC,plot_title = "GO-CC: public gene sets")
+
+dev.off()
+```
+## add evidence to the ranking list
+
+```{r}
+# the previous script in "enrichment_in_LOF_intolerant"
+
+# combined caseonly GOBP terms: microtubule and cilium related
+
+mark<-GOBP_clusterprofiler.combined_caseonly$Description %>% grepl("sperm",.) %>% lapply(.,isFALSE) %>% unlist
+filter.GOBP_clusterprofiler.combined_caseonly<-GOBP_clusterprofiler.combined_caseonly %>% filter(mark)
+mark<-grepl("microtubule|axoneme|cytoskeleton|cilium",filter.GOBP_clusterprofiler.combined_caseonly$Description)
+filter.GOBP_clusterprofiler.combined_caseonly %<>% filter(mark)
+filter_ID.GOBP_clusterprofiler.combined_caseonly<-filter.GOBP_clusterprofiler.combined_caseonly$geneID %>% strsplit(.,"/",fixed = TRUE) %>% unlist %>% unique
+
+# combined burdened GOBP terms: microtubule and cilium related
+
+mark<-GOBP_clusterprofiler.combined_burdened$Description %>% grepl("sperm",.) %>% lapply(.,isFALSE) %>% unlist
+filter.GOBP_clusterprofiler.combined_burdened<-GOBP_clusterprofiler.combined_burdened %>% filter(mark)
+mark<-grepl("microtubule|axoneme|cytoskeleton|cilium",filter.GOBP_clusterprofiler.combined_burdened$Description)
+filter.GOBP_clusterprofiler.combined_burdened %<>% filter(mark)
+filter_ID.GOBP_clusterprofiler.combined_burdened<-filter.GOBP_clusterprofiler.combined_burdened$geneID %>% strsplit(.,"/",fixed = TRUE) %>% unlist %>% unique
+
+# add evidence to the ranking list
+
+filter_ID.GOBP_clusterprofiler<-c(filter_ID.GOBP_clusterprofiler.combined_caseonly,filter_ID.GOBP_clusterprofiler.combined_burdened) %>% unique
+
+evidence_df<-read.xlsx("evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+evidence_df$GOBP_microtubule_cilium_related<-evidence_df$ENTREZID %>% lapply(.,function(x){if(x %in% filter_ID.GOBP_clusterprofiler){1}else{0}}) %>% unlist
+write.xlsx(evidence_df,"evidence-ranking_table_all-case-only-and-burdened-genes.xlsx")
+
+# the next script is "WGCNA_brainregioncombined_enrichment_analysis-GO"
+```
+
+## paper writing added analysis
+
+```{r}
+# cilium related
+
+mark<-GOBP_clusterprofiler.combined_burdened$Description %>% grepl("sperm",.) %>% lapply(.,isFALSE) %>% unlist
+filter.GOBP_clusterprofiler_cilium.combined_burdened<-GOBP_clusterprofiler.combined_burdened %>% filter(mark)
+mark<-grepl("axoneme|cilium",filter.GOBP_clusterprofiler_cilium.combined_burdened$Description)
+filter.GOBP_clusterprofiler_cilium.combined_burdened %<>% filter(mark)
+filter_ID.GOBP_clusterprofiler_cilium.combined_burdened<-filter.GOBP_clusterprofiler_cilium.combined_burdened$geneID %>% strsplit(.,"/",fixed = TRUE) %>% unlist %>% unique
+
+mark<-GOBP_clusterprofiler.combined_caseonly$Description %>% grepl("sperm",.) %>% lapply(.,isFALSE) %>% unlist
+filter.GOBP_clusterprofiler_cilium.combined_caseonly<-GOBP_clusterprofiler.combined_caseonly %>% filter(mark)
+mark<-grepl("axoneme|cilium",filter.GOBP_clusterprofiler_cilium.combined_caseonly$Description)
+filter.GOBP_clusterprofiler_cilium.combined_caseonly %<>% filter(mark)
+filter_ID.GOBP_clusterprofiler_cilium.combined_caseonly<-filter.GOBP_clusterprofiler_cilium.combined_caseonly$geneID %>% strsplit(.,"/",fixed = TRUE) %>% unlist %>% unique
+
+filter_ID.GOBP_clusterprofiler_cilium<-c(filter_ID.GOBP_clusterprofiler_cilium.combined_caseonly,filter_ID.GOBP_clusterprofiler_cilium.combined_burdened) %>% unique
+
+filter_ID.GOBP_clusterprofiler_cilium.burdened<-filter_ID.GOBP_clusterprofiler_cilium[filter_ID.GOBP_clusterprofiler_cilium %in% burdengenes_dementia_list$ENTREZID]
+length(filter_ID.GOBP_clusterprofiler_cilium.burdened) # 5 > "22994" "80217" "22832" "84059" "64072"
+```
+
+## save.image
+
+```{r}
+save.image("R05_pathwaybased_enrichment_plots.RData")
+```
