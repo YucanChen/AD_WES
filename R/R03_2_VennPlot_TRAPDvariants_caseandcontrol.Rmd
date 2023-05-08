@@ -1,0 +1,156 @@
+---
+title: "VennPlot_TRAPDvariants_caseandcontrol"
+author: "CYC"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## set work directory & load packages
+
+setwd("/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627")
+
+```{r, message=FALSE, warning=FALSE}
+library(openxlsx)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+library(VennDiagram)
+library(devtools)
+library(Vennerable)
+
+inPath<-"/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/burden_test"
+outPath<-"/AD_exome/Downstream_analyses/AD_downstream_scripts_20220627/riskgene_exploratory_analyses"
+```
+
+## load data
+
+```{r}
+load('R02_significant_burdened_and_caseonly_mutated.genesets.RData')
+load('R03_burdengenes_PPIpartner_extraction.genesets.RData')
+
+case.dementia<-read.table(paste(inPath,'outfile_GENES.dementia_case.txt',sep = '/'))[,1]
+control.dementia<-read.table(paste(inPath,'outfile_GENES.dementia_control.txt',sep = '/'))[,1]
+case.AD<-read.table(paste(inPath,'outfile_GENES.AD_case.txt',sep = '/'))[,1]
+control.AD<-read.table(paste(inPath,'outfile_GENES.AD_control.txt',sep = '/'))[,1]
+```
+
+
+## TRAPD case v.s. control venn plots
+
+```{r}
+# dementia
+list_combined_dementia <- list("case variants"=case.dementia,"control variants"=control.dementia)
+venn.diagram(list_combined_dementia,height = 3000, width = 3000,cat.dist= 0.25,cat.pos=c(0,0),
+             resolution = 300, imagetype = "png", alpha=c(0.8,0.6),cex=2.5,
+             fill=c("slategray2","lightgoldenrod1"),cat.cex=3,sub.cex=3,
+             filename = paste(outPath,"VennDiagram_TRAPDvariants_casecontrol_dementia.png",sep = '/')) # cat.fontface=4,fontfamily=3
+
+# AD
+list_combined_AD <- list("case variants"=case.AD,"control variants"=control.AD)
+venn.diagram(list_combined_AD,height = 3000, width = 3000,cat.dist= 0.25,cat.pos=c(0,0),
+             resolution = 300, imagetype = "png", alpha=c(0.8,0.6),cex=2.5,
+             fill=c("slategray2","lightgoldenrod1"),cat.cex=3,sub.cex=3,
+             filename = paste(outPath,"VennDiagram_TRAPDvariants_casecontrol_AD.png",sep = '/')) # cat.fontface=4,fontfamily=3
+```
+
+## overlap of candidate risk genes with AD known genes (ChowRuskey plot)
+
+```{r}
+AD_known_genes<-read.table('AD_knownsig_geneset_v2.txt')[,1]
+
+# overlap of mutated genes and AD known genes
+
+## annotate case mutated genes with Entrez ID
+anno.dementia<-read.xlsx(paste(inPath,'burdengenes_result_extraction.annotated.xlsx',sep = '/'),sheet = 'dementia') %>% dplyr::select(c('GENE','entrezgene_id'))
+anno.AD<-anno.dementia<-read.xlsx(paste(inPath,'burdengenes_result_extraction.annotated.xlsx',sep = '/'),sheet = 'AD') %>% dplyr::select(c('GENE','entrezgene_id'))
+case.dementia.anno<-lapply(case.dementia, function(x){if(x %in% anno.dementia$GENE){c(x,unique(anno.dementia[which(anno.dementia$GENE==x),'entrezgene_id']))}else{c(x,'NA')}})
+case.AD.anno<-lapply(case.AD, function(x){if(x %in% anno.AD$GENE){c(x,unique(anno.AD[which(anno.AD$GENE==x),'entrezgene_id']))}else{c(x,'NA')}})
+#lapply(case.dementia.anno, length) %>% unlist %>% table
+#lapply(case.AD.anno, length) %>% unlist %>% table
+case.dementia.anno<-do.call(rbind,case.dementia.anno) %>% as.data.frame() %>% dplyr::rename(.,GENE=V1,entrezgene_id=V2)
+case.AD.anno<-do.call(rbind,case.AD.anno) %>% as.data.frame() %>% dplyr::rename(.,GENE=V1,entrezgene_id=V2)
+#nrow(case.dementia.anno %>% dplyr::filter(entrezgene_id=='NA'))
+#nrow(case.AD.anno %>% dplyr::filter(entrezgene_id=='NA'))
+write.table(case.dementia.anno %>% dplyr::filter(entrezgene_id=='NA') %>% dplyr::pull(GENE),paste(outPath,'case.dementia.un_annotated.txt',sep = '/'),sep = '\n',quote = F,row.names = F,col.names = F)
+case.dementia.un_annotated<-read.xlsx(paste(outPath,'metascape_result.case.dementia.un_annotated.xlsx',sep = '/')) %>% dplyr::select(MyList,Gene.ID) %>% dplyr::rename(.,GENE=MyList,entrezgene_id=Gene.ID)
+case.dementia.anno %<>% dplyr::filter(!(GENE %in% case.dementia.un_annotated$GENE)) %>% rbind(.,case.dementia.un_annotated)
+#nrow(case.dementia.anno %>% dplyr::filter(entrezgene_id=='NA'))
+save(case.dementia.anno,case.AD.anno,file = 'R03_2_VennPlot_TRAPDvariants_casemutated_withAnnotation.genesets.RData')
+rm(anno.dementia,anno.AD,case.dementia.un_annotated)
+
+ADknown_combined.casemutated <- list("AD known"=AD_known_genes,"dementia"=case.dementia.anno$entrezgene_id,"AD"=case.AD.anno$entrezgene_id)
+V4a.casemutated <- Venn(Sets = ADknown_combined.casemutated)
+plot(V4a.casemutated, type = "ChowRuskey", show = list(SetLabels = T))
+partitions_ADknown_combined.casemutated <- get.venn.partitions(ADknown_combined.casemutated)
+overlapped_ADknown_combined.casemutated <- partitions_ADknown_combined.casemutated[1,"..values.."]$`1`
+
+
+# overlap of case-only mutated genes and AD known genes
+
+ADknown_combined.caseonly <- list("AD known"=AD_known_genes,"dementia"=all_burdened_caseonly$dementia.caseonly$ENTREZID,"AD"=all_burdened_caseonly$AD.caseonly$ENTREZID)
+V4a.caseonly <- Venn(Sets = ADknown_combined.caseonly)
+plot(V4a.caseonly, type = "ChowRuskey", show = list(SetLabels = T))
+partitions_ADknown_combined.caseonly <- get.venn.partitions(ADknown_combined.caseonly)
+overlapped_ADknown_combined.caseonly <- partitions_ADknown_combined.caseonly[1,"..values.."]$`1`
+
+# overlap of burdened genes and AD known genes
+
+ADknown_combined.burdened <- list("AD known"=AD_known_genes,"dementia"=burdengenes_dementia_list$ENTREZID,"AD"=burdengenes_AD_list$ENTREZID)
+V4a.burdened <- Venn(Sets = ADknown_combined.burdened)
+plot(V4a.burdened, type = "ChowRuskey", show = list(SetLabels = T))
+partitions_ADknown_combined.burdened <- get.venn.partitions(ADknown_combined.burdened)
+overlapped_ADknown_combined.burdened <- partitions_ADknown_combined.burdened[1,"..values.."]$`1`
+
+# overlap of PPI genes and AD known genes
+
+ADknown_combined.PPI <- list("AD known"=AD_known_genes,"dementia"=dementia_PPI_cluster,"AD"=AD_PPI_cluster)
+V4a.PPI <- Venn(Sets = ADknown_combined.PPI)
+plot(V4a.PPI, type = "ChowRuskey", show = list(SetLabels = T))
+partitions_ADknown_combined.PPI <- get.venn.partitions(ADknown_combined.PPI)
+overlapped_ADknown_combined.PPI <- partitions_ADknown_combined.PPI[1,"..values.."]$`1`
+```
+
+## output ChowRuskey plot
+
+### define function
+
+```{r}
+plot_ChowRuskey<-function(V4a_object){
+  Tstem <- compute.Venn(V4a_object)
+  gp <- VennThemes(Tstem, colourAlgorithm = "sequential")
+  gps <- gp[["Set"]]
+  nSets <- length(gps)
+  for(ix in 1:nSets){
+    gps[[ix]]$lwd <- nSets + 1 - ix
+  }
+  gp[["Set"]] <- gps
+  plot(V4a_object, type = "ChowRuskey", show = list(SetLabels = T))
+}
+```
+
+### output plots
+
+```{r}
+# overlap of mutated genes and AD known genes
+
+plot_ChowRuskey(V4a.casemutated)
+
+# overlap of case-only mutated genes and AD known genes
+
+#plot_ChowRuskey(V4a.caseonly)
+plot(V4a.caseonly, type = "ChowRuskey", show = list(SetLabels = T))
+
+# overlap of burdened genes and AD known genes
+
+plot_ChowRuskey(V4a.burdened)
+
+# overlap of PPI genes and AD known genes
+
+plot_ChowRuskey(V4a.PPI)
+```
+
+
+## save image
+
+```{r}
+save.image('R03_2_VennPlot_TRAPDvariants_caseandcontrol.RData')
+```
