@@ -1,1 +1,71 @@
+Starting files:
+gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D_PTV.vcf.gz
 
+# control data processing: 
+# WES_grep_probablydamaging.sh
+# WESanalysis_3rd_mutationratio_gnomadcontrol_MAF_Syn_filtering.supl.sh
+# WESanalysis_3rd_mutationratio_01_gnomadcontrol_MAF_Syn_filtering.sh
+
+#zcat /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY.vcf.gz | head -4247 | gzip > /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D.vcf.gz
+#zcat /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY.vcf.gz | grep 'probably_damaging' | gzip >> /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D.vcf.gz
+
+#zcat /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D.vcf.gz | grep -v 'synonymous_variant' | gzip > /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D_nosyn.vcf.gz
+
+#zcat /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D.vcf.gz | grep -n '#CHROM'
+#zcat /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D.vcf.gz | head -4247 | gzip > /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D_PTV.vcf.gz
+#zcat /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D.vcf.gz | grep 'missense_variant\|frameshift_variant\|splice_donor_variant\|splice_acceptor_variant\|stop_gained' | grep 'protein_coding' | gzip >> /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D_PTV.vcf.gz
+ 
+control_in=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D_PTV.vcf.gz
+control_clean=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.vcf.gz
+vcftools --gzvcf $control_in --not-chr chr1_KI270766v1_alt --not-chr chr15_KI270850v1_alt --not-chr chr17_KI270857v1_alt --not-chr chr22_KI270879v1_alt --not-chr chr17_KI270909v1_alt --not-chr chr19_KI270938v1_alt --stdout --recode --recode-INFO-all | bgzip -c > $control_clean
+
+##################################################################
+# WESanalysis_3rd_mutationratio_gnomadcontrol_MAF_Syn_filtering.supl.sh
+
+# input files
+
+deXYclean=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean.vcf.gz
+deXYclean2=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean2.vcf.gz
+
+#vcftools --gzvcf $deXYclean --not-chr chr15_KI270851v1_alt --stdout --recode --recode-INFO-all | gzip > $deXYclean2
+
+# <PAV variants>
+
+#gnomad_merge (No replicated variant!)
+
+#conda deactivate
+#source activate cloud_disk
+
+deXYclean_PAV=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.vcf.gz
+deXYclean_indelPAV=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTV_indel2.vcf.gz
+#zcat /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D.vcf.gz | grep 'missense_variant\|frameshift_variant\|splice_donor_variant\|splice_acceptor_variant\|stop_gained' | grep 'protein_coding' | gzip >> /lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis/burden_test/control_data/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXY_D_PTV.vcf.gz
+
+deXYclean_PAV_rare=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis_3rdadjust/mutationratio_validation/control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.rare.vcf.gz
+deXYclean_indelPAV_rare=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis_3rdadjust/mutationratio_validation/control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTV_indel2.rare.vcf.gz
+
+#filter_vep -i $deXYclean_PAV --filter "AF_popmax < 0.001 and non_topmed_AF_popmax < 0.001 and non_neuro_AF_popmax < 0.001 and non_cancer_AF_popmax < 0.001 and controls_AF_popmax < 0.001" | bgzip > $deXYclean_PAV_rare &
+#filter_vep -i $deXYclean_indelPAV --filter "AF_popmax < 0.001 and non_topmed_AF_popmax < 0.001 and non_neuro_AF_popmax < 0.001 and non_cancer_AF_popmax < 0.001 and controls_AF_popmax < 0.001" | bgzip > $deXYclean_indelPAV_rare &
+#wait
+
+deXYclean_PAV_rare_snp=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis_3rdadjust/mutationratio_validation/control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.snp.rare.vcf.gz
+#header=$(zcat $deXYclean_PAV_rare | grep -n '#CHROM' | cut -f1 -d:)
+
+#zcat $deXYclean_PAV_rare | head -$header | gzip > $deXYclean_PAV_rare_snp && zcat $deXYclean_PAV_rare | grep 'variant_type=snv' | gzip >> $deXYclean_PAV_rare_snp
+#wait
+
+bgzip_deXYclean_PAV_rare_snp=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis_3rdadjust/mutationratio_validation/control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_D_PTV.snp.rare.vcf.bgz
+bgzip_deXYclean_indelPAV_rare=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis_3rdadjust/mutationratio_validation/control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTV_indel2.rare.vcf.bgz
+merged_PAV=/lustre/home/acct-bmelgn/bmelgn-1/cm/WES_analysis_3rdadjust/mutationratio_validation/control_mutations/gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTVcal.rare.merge.vcf.gz
+
+#zcat $deXYclean_PAV_rare_snp | bgzip -c > $bgzip_deXYclean_PAV_rare_snp && tabix -p vcf $bgzip_deXYclean_PAV_rare_snp &
+#zcat $deXYclean_indelPAV_rare | bgzip -c > $bgzip_deXYclean_indelPAV_rare && tabix -p vcf $bgzip_deXYclean_indelPAV_rare &
+#wait
+
+#conda deactivate
+#source activate bioinfo
+
+#bcftools concat -a $bgzip_deXYclean_PAV_rare_snp $bgzip_deXYclean_indelPAV_rare -Oz -o $merged_PAV
+
+
+####################################################################################
+# final: gnomad.exomes.r2.1.1.sites.liftover_grch38_deXYclean_PTVcal.rare.merge.pass.vcf.gz
